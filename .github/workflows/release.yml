@@ -1,9 +1,10 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
+  # Trigger when a GitHub Release is published (e.g., by semantic-release)
+  release:
+    types: [published]
+  # Also allow manual trigger
   workflow_dispatch: {}
 
 permissions:
@@ -11,7 +12,7 @@ permissions:
 
 env:
   CGO_ENABLED: "1"
-  VERSION: ${{ github.ref_name || 'dev' }}
+  VERSION: ${{ github.event.release.tag_name || github.ref_name || 'dev' }}
 
 jobs:
   build-windows:
@@ -240,8 +241,9 @@ jobs:
           if-no-files-found: warn
 
   publish:
-    name: Create GitHub Release
+    name: Upload Release Assets
     runs-on: ubuntu-latest
+    if: github.event_name == 'release'
     needs: [build-windows, build-linux, build-macos, build-macos-arm64]
     steps:
       - name: Download all artifacts
@@ -255,13 +257,12 @@ jobs:
           cd release_assets
           sha256sum * > SHA256SUMS.txt
 
-      - name: Create GitHub Release
+      - name: Upload assets to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: locail ${{ github.ref_name }}
-          draft: false
-          prerelease: false
+          tag_name: ${{ github.event.release.tag_name }}
           files: |
             release_assets/*
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
