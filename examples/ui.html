@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LLM Translator UI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Simple focus ring for keyboard users */
+    :focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }
+    /* Smooth textarea autoresize */
+    textarea{ resize: none; }
+  </style>
+</head>
+<body class="h-screen w-screen antialiased text-slate-900 bg-slate-50">
+  <div id="app" class="h-full w-full flex">
+    <!-- Sidebar -->
+    <aside class="w-80 max-w-xs bg-white border-r border-slate-200 flex flex-col">
+      <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="h-8 w-8 rounded-xl bg-indigo-600 text-white grid place-items-center font-bold">LT</div>
+          <h1 class="text-sm font-semibold">LLM Translator</h1>
+        </div>
+        <button id="collapseSidebar" class="p-2 rounded-xl hover:bg-slate-100" title="Collapse sidebar" aria-label="Collapse sidebar">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H8m0 0 4 4m-4-4 4-4"/></svg>
+        </button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="px-3 pt-3">
+        <div role="tablist" aria-label="Sidebar tabs" class="grid grid-cols-3 gap-2">
+          <button data-tab="projects" class="tab-btn tab-active">Projects</button>
+          <button data-tab="files" class="tab-btn">Files</button>
+          <button data-tab="settings" class="tab-btn">Settings</button>
+        </div>
+      </div>
+
+      <div class="p-3 grow overflow-auto">
+        <!-- Projects tab -->
+        <section id="tab-projects" class="tab-pane">
+          <label class="block text-xs font-medium text-slate-600 mb-1">Select Project</label>
+          <div class="flex gap-2">
+            <select id="projectSelect" class="w-full rounded-xl border-slate-300 focus:ring-0">
+            </select>
+            <button id="newProjectBtn" class="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50" title="Create project">+ </button>
+          </div>
+
+          <div class="mt-4">
+            <label class="block text-xs font-medium text-slate-600 mb-1">Recent Projects</label>
+            <ul id="recentProjects" class="space-y-1 text-sm"></ul>
+          </div>
+        </section>
+
+        <!-- Files tab -->
+        <section id="tab-files" class="tab-pane hidden">
+          <div class="flex items-center gap-2">
+            <div class="grow">
+              <label class="block text-xs font-medium text-slate-600 mb-1">Current File</label>
+              <select id="fileSelect" class="w-full rounded-xl border-slate-300 focus:ring-0"></select>
+            </div>
+            <button id="refreshFiles" class="mt-6 px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50" title="Refresh files">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/><path d="M21 3v6h-6"/></svg>
+            </button>
+          </div>
+          <div class="mt-4">
+            <label class="block text-xs font-medium text-slate-600 mb-1">All Files</label>
+            <ul id="fileTree" class="text-sm space-y-1"></ul>
+          </div>
+        </section>
+
+        <!-- Settings tab -->
+        <section id="tab-settings" class="tab-pane hidden">
+          <div class="space-y-4">
+            <div>
+              <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">AI Provider</h3>
+              <div class="grid grid-cols-2 gap-2">
+                <label class="col-span-2 text-sm">Provider
+                  <select id="provider" class="mt-1 w-full rounded-xl border-slate-300 focus:ring-0">
+                    <option value="openai">OpenAI Compatible</option>
+                    <option value="anthropic">Anthropic Compatible</option>
+                    <option value="local">Local HTTP</option>
+                  </select>
+                </label>
+                <label class="text-sm">Base URL
+                  <input id="baseUrl" class="mt-1 w-full rounded-xl border-slate-300" placeholder="https://api.example.com" />
+                </label>
+                <label class="text-sm">Model
+                  <input id="model" class="mt-1 w-full rounded-xl border-slate-300" placeholder="gpt-4o-mini" />
+                </label>
+                <label class="col-span-2 text-sm">API Key
+                  <input id="apiKey" type="password" class="mt-1 w-full rounded-xl border-slate-300" placeholder="••••••••" />
+                </label>
+              </div>
+            </div>
+            <div>
+              <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Translation Options</h3>
+              <div class="grid grid-cols-2 gap-2">
+                <label class="text-sm">Formality
+                  <select id="formality" class="mt-1 w-full rounded-xl border-slate-300">
+                    <option>auto</option>
+                    <option>formal</option>
+                    <option>informal</option>
+                  </select>
+                </label>
+                <label class="text-sm">Tone
+                  <select id="tone" class="mt-1 w-full rounded-xl border-slate-300">
+                    <option>neutral</option>
+                    <option>friendly</option>
+                    <option>concise</option>
+                    <option>marketing</option>
+                  </select>
+                </label>
+                <label class="col-span-2 text-sm">Glossary (comma-separated terms)
+                  <input id="glossary" class="mt-1 w-full rounded-xl border-slate-300" placeholder="user, server, channel" />
+                </label>
+                <label class="text-sm flex items-center gap-2 mt-1">
+                  <input id="preservePlaceholders" type="checkbox" class="rounded" checked />
+                  Preserve placeholders (e.g., {count}, %s)
+                </label>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="border-t border-slate-200 p-3 text-xs text-slate-600 flex items-center justify-between">
+        <div>Status: <span id="status">Ready</span></div>
+        <button id="importBtn" class="px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-50">Import JSON</button>
+        <input id="importInput" type="file" accept="application/json" class="hidden" />
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="flex-1 flex flex-col min-w-0">
+      <header class="bg-white border-b border-slate-200 p-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="flex items-center gap-2">
+            <label class="text-xs text-slate-600">Source</label>
+            <select id="srcLang" class="rounded-xl border-slate-300 text-sm">
+              <option value="en">English (en)</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="text-xs text-slate-600">Target</label>
+            <select id="tgtLang" class="rounded-xl border-slate-300 text-sm"></select>
+          </div>
+
+          <div class="grow min-w-[200px] flex items-center gap-2">
+            <div class="relative flex-1">
+              <input id="search" placeholder="Search keys or text  ( / )" class="w-full rounded-xl border-slate-300 pl-9" />
+              <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            </div>
+            <label class="flex items-center gap-2 text-sm text-slate-700">
+              <input id="onlyUntranslated" type="checkbox" class="rounded" />
+              Untranslated only
+            </label>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button id="selectAll" class="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-sm" title="Select all rows">Select all</button>
+            <button id="aiTranslateSelected" class="px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 text-sm" title="AI translate selected">AI Translate</button>
+            <button id="saveBtn" class="px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 text-sm" title="Save (Ctrl/Cmd+S)">Save</button>
+            <a id="downloadLink" class="hidden px-3 py-2 rounded-xl border border-slate-200 text-sm" download>Download</a>
+          </div>
+        </div>
+        <div class="mt-2 flex items-center gap-4 text-xs text-slate-600">
+          <div>File: <span id="currentFileLabel" class="font-medium">—</span> <span id="dirtyDot" class="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-amber-400 align-middle hidden"></span></div>
+          <div id="counters">0 keys</div>
+          <div class="ml-auto">Shortcuts: <kbd class="px-1.5 py-0.5 rounded bg-slate-100 border">/</kbd> focus search · <kbd class="px-1.5 py-0.5 rounded bg-slate-100 border">Ctrl/Cmd+S</kbd> save</div>
+        </div>
+      </header>
+
+      <section id="tableWrap" class="grow overflow-auto">
+        <table class="w-full text-sm">
+          <thead class="sticky top-0 bg-white border-b border-slate-200 z-10">
+            <tr class="text-left text-slate-500">
+              <th class="px-3 py-2 w-10"></th>
+              <th class="px-3 py-2 w-[24ch]">Key</th>
+              <th class="px-3 py-2">Source</th>
+              <th class="px-3 py-2 w-[28ch]">Old</th>
+              <th class="px-3 py-2 w-[36ch]">Translation</th>
+              <th class="px-3 py-2 w-[26ch]">Suggestions</th>
+              <th class="px-3 py-2 w-[12ch]">Checks</th>
+            </tr>
+          </thead>
+          <tbody id="rows" class="divide-y divide-slate-200"></tbody>
+        </table>
+      </section>
+
+      <footer class="border-t border-slate-200 bg-white p-2 text-xs text-slate-600 flex items-center justify-between">
+        <div id="footerStatus">Ready.</div>
+        <div class="flex items-center gap-2">
+          <button id="exportMemory" class="px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-50">Export TMX/JSON</button>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <template id="rowTemplate">
+    <tr>
+      <td class="px-3 py-2 align-top"><input type="checkbox" class="row-check rounded" /></td>
+      <td class="px-3 py-2 align-top font-mono text-xs text-slate-700 truncate key"></td>
+      <td class="px-3 py-2 align-top text-slate-800 source"></td>
+      <td class="px-3 py-2 align-top text-slate-500 old"></td>
+      <td class="px-3 py-2 align-top">
+        <textarea class="tgt w-full rounded-xl border-slate-300 px-2 py-1 leading-6" rows="1" placeholder="Type translation…"></textarea>
+      </td>
+      <td class="px-3 py-2 align-top">
+        <select class="suggest w-full rounded-xl border-slate-300">
+          <option value="" disabled selected>Suggestions…</option>
+        </select>
+      </td>
+      <td class="px-3 py-2 align-top text-xs checks"></td>
+    </tr>
+  </template>
+
+  <script>
+  // --- Utilities ---
+  const $ = (s, el=document) => el.querySelector(s);
+  const $$ = (s, el=document) => Array.from(el.querySelectorAll(s));
+  const fmt = (n) => new Intl.NumberFormat().format(n);
+
+  function autosizeTA(ta){
+    ta.style.height = 'auto';
+    ta.style.height = (ta.scrollHeight)+ 'px';
+  }
+
+  function deepClone(x){ return JSON.parse(JSON.stringify(x)); }
+
+  function download(fileName, text){
+    const blob = new Blob([text], {type: 'application/json;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function fileBase(path){ return path.split('/').pop(); }
+
+  function collectPlaceholders(txt){
+    if(!txt) return [];
+    const re = /\{[^\}]+\}|%[sdif]|:\w+/g; // {count}, %s, :name
+    return Array.from(new Set((txt.match(re)||[])));
+  }
+
+  function placeholdersOk(src, tgt){
+    const a = collectPlaceholders(src); const b = collectPlaceholders(tgt);
+    return a.every(p => b.includes(p));
+  }
+
+  // --- Demo data ---
+  const demo = {
+    id: 'proj1', name: 'Demo App', languages: ['en','ru','de','es','fr'],
+    files: [
+      { path: 'i18n/common.json', entries: [
+        { key:'app.title', source:'Welcome to Gochat', translations:{ru:'Добро пожаловать в Gochat'} },
+        { key:'nav.home', source:'Home', translations:{} },
+        { key:'nav.settings', source:'Settings', translations:{ru:'Настройки'} },
+        { key:'msg.unread_count', source:'{count} unread message', translations:{}, notes:'plural' },
+        { key:'btn.save', source:'Save', translations:{ru:'Сохранить'} },
+        { key:'auth.sign_in', source:'Sign in', translations:{} },
+        { key:'auth.sign_out', source:'Sign out', translations:{ru:'Выйти'} },
+        { key:'errors.network', source:'Network error. Please try again.', translations:{} },
+        { key:'channel.joined', source:'You joined the channel {name}', translations:{} },
+      ]},
+      { path: 'i18n/errors.json', entries: [
+        { key:'error.unknown', source:'An unknown error occurred.', translations:{} },
+        { key:'error.timeout', source:'Request timed out after {seconds}s', translations:{} },
+      ]}
+    ]
+  };
+
+  // a tiny fake MT for demo
+  const tinyDictRU = new Map(Object.entries({
+    'welcome':'добро пожаловать', 'home':'главная', 'settings':'настройки', 'save':'сохранить',
+    'sign':'войти', 'sign in':'войти', 'sign out':'выйти', 'network':'сеть', 'error':'ошибка', 'please':'пожалуйста', 'try':'попробуйте', 'again':'снова',
+    'request':'запрос', 'timed':'превышено', 'out':'время', 'after':'после', 'unknown':'неизвестная', 'message':'сообщение', 'unread':'непрочитанное',
+    'you':'вы', 'joined':'присоединились', 'the':'', 'channel':'канал'
+  }));
+
+  function fakeTranslateToRU(text){
+    // Preserve placeholders first
+    const placeholders = {};
+    let i = 0;
+    text = text.replace(/(\{[^\}]+\}|%[sdif]|:\w+)/g, (m)=>{ const t = `§§${i++}§§`; placeholders[t]=m; return t; });
+    const result = text.split(/(\W+)/).map(tok => {
+      const lower = tok.toLowerCase();
+      if (tinyDictRU.has(lower)) {
+        const v = tinyDictRU.get(lower);
+        return /[A-Z]/.test(tok[0]||'') ? (v.charAt(0).toUpperCase()+v.slice(1)) : v;
+      }
+      return tok; // fallback
+    }).join(' ').replace(/\s+(\W)/g,'$1').replace(/\s{2,}/g,' ');
+    return result.replace(/§§\d+§§/g, t=>placeholders[t] );
+  }
+
+  // Translation memory (very simple, in-memory)
+  const TM = new Map(); // key: source|tgt, val: translation
+
+  const state = {
+    projects: [demo],
+    selectedProjectId: 'proj1',
+    selectedFilePath: demo.files[0].path,
+    srcLang: 'en',
+    tgtLang: 'ru',
+    onlyUntranslated: false,
+    search: '',
+    dirty: false,
+    selection: new Set(),
+  };
+
+  // --- Rendering ---
+  function setStatus(msg){ $('#status').textContent = msg; $('#footerStatus').textContent = msg; }
+  function setDirty(d){ state.dirty = d; $('#dirtyDot').classList.toggle('hidden', !d); }
+
+  function currentProject(){ return state.projects.find(p=>p.id===state.selectedProjectId); }
+  function currentFile(){ return currentProject().files.find(f=>f.path===state.selectedFilePath); }
+
+  function renderProjects(){
+    const p = currentProject();
+    const sel = $('#projectSelect'); sel.innerHTML = state.projects.map(pr=>`<option value="${pr.id}" ${pr.id===p.id?'selected':''}>${pr.name}</option>`).join('');
+    $('#recentProjects').innerHTML = state.projects.map(pr=>`<li><button class="w-full text-left px-2 py-1 rounded-lg hover:bg-slate-100" data-proj="${pr.id}">${pr.name}</button></li>`).join('');
+  }
+
+  function renderFiles(){
+    const p = currentProject();
+    const sel = $('#fileSelect'); sel.innerHTML = p.files.map(f=>`<option value="${f.path}" ${f.path===state.selectedFilePath?'selected':''}>${f.path}</option>`).join('');
+    const tree = $('#fileTree');
+    tree.innerHTML = p.files.map(f=>{
+      const count = f.entries.length;
+      const untranslated = f.entries.filter(e=>!e.translations[state.tgtLang]).length;
+      const cur = f.path===state.selectedFilePath;
+      return `<li>
+        <button class="w-full text-left px-2 py-1 rounded-lg hover:bg-slate-100 ${cur?'bg-slate-100':''}" data-file="${f.path}">
+          <span class="font-mono text-xs">${f.path}</span>
+          <span class="ml-2 text-xs text-slate-500">${untranslated}/${count}</span>
+        </button>
+      </li>`;
+    }).join('');
+    $('#currentFileLabel').textContent = state.selectedFilePath;
+  }
+
+  function renderLangs(){
+    const p = currentProject();
+    $('#tgtLang').innerHTML = p.languages.filter(l=>l!==state.srcLang).map(l=>`<option value="${l}" ${l===state.tgtLang?'selected':''}>${l}</option>`).join('');
+  }
+
+  function suggestionsFor(entry){
+    const list = [];
+    const tgt = state.tgtLang;
+    const old = entry.translations?.[tgt];
+    if(old) list.push({label:`Previous (${tgt})`, value: old});
+
+    // TM matches
+    const mem = TM.get(entry.source+'|'+tgt);
+    if(mem && mem!==old) list.push({label:'Memory', value: mem});
+
+    // naive MT for ru
+    if(tgt==='ru'){
+      const mt = fakeTranslateToRU(entry.source);
+      if(mt && mt!==old) list.push({label:'AI (demo)', value: mt});
+    }
+
+    // Copy source as last resort (useful for proper nouns)
+    if(entry.source && entry.source!==old) list.push({label:'Copy source', value: entry.source});
+
+    return list;
+  }
+
+  function rowHTML(entry){
+    const tpl = document.importNode($('#rowTemplate').content, true);
+    tpl.querySelector('.key').textContent = entry.key;
+    tpl.querySelector('.source').textContent = entry.source;
+    const old = entry.translations?.[state.tgtLang] || '';
+    tpl.querySelector('.old').textContent = old || '—';
+
+    const ta = tpl.querySelector('.tgt');
+    ta.value = old;
+    autosizeTA(ta);
+
+    const sel = tpl.querySelector('.suggest');
+    const sugg = suggestionsFor(entry);
+    sel.innerHTML = '<option value="" disabled selected>Suggestions…</option>' + sugg.map(s=>`<option value="${s.value.replaceAll('"','&quot;')}">${s.label}: ${s.value.length>40?s.value.slice(0,40)+'…':s.value}</option>`).join('');
+
+    // checks
+    const checks = tpl.querySelector('.checks');
+    const ok = placeholdersOk(entry.source, old);
+    checks.innerHTML = `
+      <div class="flex flex-col gap-1">
+        <span class="inline-flex items-center gap-1 ${ok?'text-emerald-600':'text-amber-600'}">
+          <span class="h-2 w-2 rounded-full ${ok?'bg-emerald-500':'bg-amber-500'}"></span>
+          <span>${ok?'Placeholders ✓':'Check placeholders'}</span>
+        </span>
+      </div>`;
+
+    // dataset
+    const tr = tpl.querySelector('tr');
+    tr.dataset.key = entry.key;
+    tr.dataset.source = entry.source;
+
+    return tpl;
+  }
+
+  function filteredEntries(){
+    const file = currentFile();
+    let items = file.entries;
+    if(state.search){
+      const q = state.search.toLowerCase();
+      items = items.filter(e => e.key.toLowerCase().includes(q) || e.source.toLowerCase().includes(q) || (e.translations[state.tgtLang]||'').toLowerCase().includes(q));
+    }
+    if(state.onlyUntranslated){
+      items = items.filter(e => !(e.translations && e.translations[state.tgtLang]));
+    }
+    return items;
+  }
+
+  function renderTable(){
+    const tbody = $('#rows');
+    tbody.innerHTML = '';
+    filteredEntries().forEach(e => tbody.appendChild(rowHTML(e)));
+
+    // counters
+    const f = currentFile();
+    const total = f.entries.length;
+    const done = f.entries.filter(e=>e.translations[state.tgtLang]).length;
+    const shown = filteredEntries().length;
+    $('#counters').textContent = `${fmt(done)}/${fmt(total)} translated · ${fmt(shown)} shown`;
+
+    // restore selection
+    $$('#rows tr').forEach(tr=>{ tr.querySelector('.row-check').checked = state.selection.has(tr.dataset.key); });
+  }
+
+  function applySelection(to){
+    state.selection = new Set(filteredEntries().map(e=>e.key));
+    $$('#rows .row-check').forEach(cb=> cb.checked = to);
+  }
+
+  // --- Events ---
+  function bindEvents(){
+    // Tabs
+    $$('.tab-btn').forEach(btn=>{
+      btn.addEventListener('click', () => {
+        $$('.tab-btn').forEach(b=>b.classList.remove('tab-active'));
+        btn.classList.add('tab-active');
+        const id = btn.dataset.tab;
+        $$('.tab-pane').forEach(p=>p.classList.add('hidden'));
+        $('#tab-'+id).classList.remove('hidden');
+      });
+    });
+
+    // Sidebar collapse (simple)
+    $('#collapseSidebar').addEventListener('click', () => {
+      document.querySelector('aside').classList.toggle('hidden');
+    });
+
+    // Project/file switches
+    $('#projectSelect').addEventListener('change', (e)=>{ state.selectedProjectId = e.target.value; renderFiles(); renderLangs(); renderTable(); });
+    $('#fileSelect').addEventListener('change', (e)=>{ state.selectedFilePath = e.target.value; renderFiles(); renderTable(); });
+    $('#refreshFiles').addEventListener('click', ()=>{ renderFiles(); setStatus('Files refreshed.'); });
+    $('#recentProjects').addEventListener('click', (e)=>{
+      const btn = e.target.closest('button[data-proj]'); if(!btn) return;
+      state.selectedProjectId = btn.dataset.proj; renderProjects(); renderFiles(); renderLangs(); renderTable();
+    });
+
+    // File tree select
+    $('#fileTree').addEventListener('click', (e)=>{
+      const b = e.target.closest('button[data-file]'); if(!b) return;
+      state.selectedFilePath = b.dataset.file; renderFiles(); renderTable();
+    });
+
+    // Filters
+    $('#search').addEventListener('input', (e)=>{ state.search = e.target.value; renderTable(); });
+    $('#onlyUntranslated').addEventListener('change', (e)=>{ state.onlyUntranslated = e.target.checked; renderTable(); });
+    $('#tgtLang').addEventListener('change', (e)=>{ state.tgtLang = e.target.value; renderFiles(); renderTable(); });
+
+    // Row delegation
+    $('#rows').addEventListener('input', (e)=>{
+      const ta = e.target.closest('.tgt'); if(!ta) return;
+      autosizeTA(ta); setDirty(true);
+      const tr = ta.closest('tr');
+      const key = tr.dataset.key;
+      // update in model
+      const file = currentFile();
+      const entry = file.entries.find(x=>x.key===key);
+      entry.translations = entry.translations || {};
+      entry.translations[state.tgtLang] = ta.value;
+
+      // checks
+      tr.querySelector('.checks').innerHTML = placeholdersOk(tr.dataset.source, ta.value)
+        ? '<span class="inline-flex items-center gap-1 text-emerald-600"><span class="h-2 w-2 rounded-full bg-emerald-500"></span>Placeholders ✓</span>'
+        : '<span class="inline-flex items-center gap-1 text-amber-600"><span class="h-2 w-2 rounded-full bg-amber-500"></span>Check placeholders</span>';
+    });
+
+    $('#rows').addEventListener('change', (e)=>{
+      // Suggestions picker
+      const sel = e.target.closest('.suggest');
+      if(sel){
+        const tr = sel.closest('tr');
+        const val = sel.value; if(!val) return;
+        const ta = tr.querySelector('.tgt');
+        ta.value = val; ta.dispatchEvent(new Event('input', {bubbles:true}));
+        sel.selectedIndex = 0; // reset
+      }
+      // Row selection
+      const cb = e.target.closest('.row-check');
+      if(cb){
+        const tr = cb.closest('tr');
+        if(cb.checked) state.selection.add(tr.dataset.key); else state.selection.delete(tr.dataset.key);
+      }
+    });
+
+    // Select all
+    $('#selectAll').addEventListener('click', ()=>{
+      const all = $$('#rows .row-check');
+      const select = all.some(cb=>!cb.checked); // if any unchecked -> select all
+      all.forEach(cb=>{ cb.checked = select; const tr = cb.closest('tr'); if(select) state.selection.add(tr.dataset.key); else state.selection.delete(tr.dataset.key); });
+    });
+
+    // Import/Export
+    $('#importBtn').addEventListener('click', ()=> $('#importInput').click());
+    $('#importInput').addEventListener('change', async (e)=>{
+      const f = e.target.files[0]; if(!f) return;
+      const txt = await f.text();
+      try{
+        const json = JSON.parse(txt);
+        const file = currentFile();
+        Object.entries(json).forEach(([k,v])=>{
+          const entry = file.entries.find(e=>e.key===k); if(entry){ entry.translations = entry.translations||{}; entry.translations[state.tgtLang]=String(v); }
+        });
+        setDirty(true); renderFiles(); renderTable(); setStatus('Imported translations.');
+      }catch(err){ alert('Invalid JSON'); }
+    });
+
+    // AI translate selected (demo)
+    $('#aiTranslateSelected').addEventListener('click', ()=>{
+      const file = currentFile();
+      let count = 0;
+      file.entries.forEach(entry=>{
+        if(!state.selection.has(entry.key)) return;
+        const opts = suggestionsFor(entry);
+        const ai = opts.find(o=>o.label.startsWith('AI'));
+        if(ai){ entry.translations = entry.translations||{}; entry.translations[state.tgtLang]=ai.value; count++; TM.set(entry.source+'|'+state.tgtLang, ai.value); }
+      });
+      setDirty(true); renderFiles(); renderTable(); setStatus(`AI filled ${count} entr${count===1?'y':'ies'} (demo).`);
+    });
+
+    // Save (download flat JSON)
+    function doSave(){
+      const file = currentFile();
+      const out = {};
+      file.entries.forEach(e=>{ out[e.key] = e.translations?.[state.tgtLang] || ''; if(out[e.key]) TM.set(e.source+'|'+state.tgtLang, out[e.key]); });
+      const name = fileBase(state.selectedFilePath).replace(/\.json$/,'') + `.${state.tgtLang}.json`;
+      download(name, JSON.stringify(out, null, 2));
+      setDirty(false); setStatus('Saved to file download.');
+    }
+    $('#saveBtn').addEventListener('click', doSave);
+
+    // Export TM as JSON (super simple)
+    $('#exportMemory').addEventListener('click', ()=>{
+      const obj = {}; TM.forEach((v,k)=>obj[k]=v);
+      download('translation-memory.json', JSON.stringify(obj, null, 2));
+      setStatus('Exported translation memory.');
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e)=>{
+      if(e.key==='/' && document.activeElement.tagName!=='INPUT' && document.activeElement.tagName!=='TEXTAREA'){
+        e.preventDefault(); $('#search').focus(); $('#search').select();
+      }
+      if((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='s'){
+        e.preventDefault(); $('#saveBtn').click();
+      }
+    });
+  }
+
+  function init(){
+    // style tab buttons
+    const style = document.createElement('style');
+    style.textContent = `.tab-btn{padding:.5rem .75rem;border-radius:.75rem;border:1px solid rgb(226 232 240);font-size:.875rem;color:rgb(71 85 105);}
+      .tab-btn:hover{background:rgb(248 250 252);} .tab-active{background:white;box-shadow:inset 0 -2px 0 0 rgb(99 102 241);border-color:rgb(203 213 225);}`;
+    document.head.appendChild(style);
+
+    renderProjects();
+    renderFiles();
+    renderLangs();
+    renderTable();
+    bindEvents();
+  }
+
+  init();
+  </script>
+</body>
+</html>
