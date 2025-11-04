@@ -46,7 +46,7 @@ jobs:
               }
             }
             // Fallback: read latest release tag
-            const { data } = await github.repos.getLatestRelease({ owner: context.repo.owner, repo: context.repo.repo })
+            const { data } = await github.rest.repos.getLatestRelease({ owner: context.repo.owner, repo: context.repo.repo })
             core.setOutput('version', data.tag_name)
   build-windows:
     name: Windows (amd64)
