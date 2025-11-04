@@ -61,6 +61,14 @@ func (r *FileRepo) ListByProject(ctx context.Context, projectID int64) ([]*domai
     return out, nil
 }
 
+func (r *FileRepo) Delete(ctx context.Context, id int64) error {
+    // With foreign keys ON and ON DELETE CASCADE, removing file will cascade to units/translations
+    q := r.SQ.Delete("files").Where(sq.Eq{"id": id})
+    sqlStr, args, _ := q.ToSql()
+    _, err := r.DB.ExecContext(ctx, sqlStr, args...)
+    return err
+}
+
 func (r *UnitRepo) UpsertBatch(ctx context.Context, units []*domain.Unit) error {
     if len(units) == 0 { return nil }
     // Use SQLite UPSERT

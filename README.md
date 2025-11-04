@@ -1,19 +1,169 @@
-# README
+# locail
 
-## About
+LLM‑assisted localization desktop app. Import translation files (Paraglide i18n JSON, CSV, Valve/HL VDF), translate missing strings with your preferred LLM provider (OpenRouter or Ollama), review and edit, then export back to the original or another format.
 
-This is the official Wails React-TS template.
+The app is built with Wails (Go + React + Vite) and stores data locally in SQLite. No cloud backend.
 
-You can configure the project by editing `wails.json`. More information about the project settings can be found
-here: https://wails.io/docs/reference/project-config
+## Features
 
-## Live Development
+- Import formats: Paraglide i18n JSON (flat key→string), CSV (`key, source[, context]`), Valve/HL VDF
+- Translate via LLM providers: OpenRouter and Ollama
+- Model discovery and connection test per provider
+- Job‑based translation: translate one row, a selection, or an entire file
+- Placeholder and Valve tag preservation with validation
+- Local translation cache to avoid repeating identical work
+- Export to original format or to another supported format (JSON/CSV/VDF)
+- Keyboard shortcuts: `/` focuses search; `Ctrl/Cmd+S` saves
 
-To run in live development mode, run `wails dev` in the project directory. This will run a Vite development
-server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
-and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
-to this in your browser, and you can call your Go code from devtools.
+## Quick Start
 
-## Building
+Prerequisites:
 
-To build a redistributable, production mode package, use `wails build`.
+- Go 1.23+
+- Node.js 16+ (or newer LTS)
+- Wails CLI: `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
+
+Install deps and run in development:
+
+1) Frontend dependencies
+
+```
+cd frontend && npm install
+```
+
+2) Live development (desktop app with hot reload)
+
+```
+wails dev
+```
+
+Build for production:
+
+```
+wails build
+./build/bin/locail
+```
+
+Frontend‑only dev server (optional):
+
+```
+cd frontend && npm run dev
+```
+
+## Usage
+
+1) Create a project
+
+- Open the app and go to Projects
+- Create a project and set its source language (e.g., `en`)
+- Add target locales in Edit Project when needed
+
+2) Configure a provider (Settings)
+
+- Add a provider and choose its type:
+  - `openrouter`: requires API key; optional custom base URL (defaults to `https://openrouter.ai`)
+  - `ollama`: no key; base URL typically `http://localhost:11434`
+- Load models to discover available model IDs and select a default
+- Use Test to verify connectivity and JSON output
+
+3) Import translation files (Files → Import)
+
+- Supported formats:
+  - Paraglide JSON: a flat JSON object of `key: value` pairs
+  - CSV: header must include `key` and a source column (`source`/`value`/`text`/`default`); optional `context`
+  - Valve/HL VDF: reads pairs from the `tokens { ... }` block
+- Provide the file’s locale (e.g., `en`)
+
+4) Translate
+
+- Select a file and target language
+- Pick the provider in the toolbar
+- Translate a single row, a selection, or use “Translate Selected” to start a job
+- Progress, current item, and last result are streamed via app events
+- Edits can be made inline and saved at any time (`Ctrl/Cmd+S`)
+
+5) Export
+
+- Use Export and choose:
+  - Original format or override to JSON/CSV/VDF
+  - For VDF, set Language Name used in the header
+  - For CSV, choose separator (comma/semicolon/tab)
+
+## Translation Behavior
+
+- Prompts instruct the model to return strict JSON: `{ "translation": "..." }`
+- The app masks placeholders like `{name}` and Valve tags (e.g., `<sfx>`, `<clr:...>`) before calling the model, then unmasks them after
+- Output is validated to ensure placeholders and tags are preserved; failures are logged and retried briefly
+- Identical source strings are cached locally by provider/model to reduce cost and latency
+
+## Data & Storage
+
+- SQLite database: `data/locail.db`
+- Providers (including API keys), files, units, translations, jobs, logs, prompt templates, and cache are stored locally
+- API keys are masked in the UI and kept only in the local database; do not commit the `data/` directory
+
+## Supported Providers
+
+- OpenRouter
+  - Base URL: `https://openrouter.ai` (default) or a compatible API endpoint
+  - Requires API key
+  - Model discovery and normalization supported
+- Ollama
+  - Base URL: `http://localhost:11434` (default)
+  - Local models only; list available models via `/api/tags`
+
+If a provider fails to produce valid JSON, the runner retries a few times and logs the cause.
+
+## Supported Formats
+
+- Paraglide i18n JSON (.json)
+- CSV (.csv)
+  - Columns: `key`, source (`source`/`value`/`text`/`default`), optional `context`
+- Valve/HL VDF (.vdf)
+  - Reads and writes under `lang { language ... tokens { "key" "value" } }`
+
+## Project Structure
+
+- Go (Wails) backend: `main.go`, `app.go`; config in `wails.json`
+- Frontend (React + TypeScript + Vite): `frontend/` (`src/main.tsx`, `src/App.tsx`, assets in `src/assets/`)
+- Generated Wails bindings: `frontend/wailsjs/**` (regenerated by Wails; do not edit)
+- Build artifacts: `build/**`; production assets in `frontend/dist` are embedded via `go:embed`
+
+Clean architecture (selected parts):
+
+- `internal/domain`: entities (Project, File, Unit, Translation, Provider, Job, Template, Cache)
+- `internal/ports`: repository and provider interfaces
+- `internal/usecase`: application services (importer, exporter, translator, jobs)
+- `internal/adapters`: SQLite repositories, parsers (JSON/CSV/VDF), exporters (JSON/CSV/VDF), LLM HTTP providers, prompt renderer
+
+## Development
+
+- Install frontend deps: `cd frontend && npm install`
+- Live development (Go + frontend): `wails dev`
+- Frontend only dev server: `cd frontend && npm run dev`
+- Frontend build + type‑check: `cd frontend && npm run build`
+- Production desktop build: `wails build` (binary in `build/bin/locail`)
+
+Notes:
+
+- Never edit `frontend/wailsjs/**`; run `wails dev` or `wails build` to regenerate
+- Ensure `gofmt -s -w .` and `go vet ./...` pass before committing changes to Go code
+- Images/fonts should live in `frontend/src/assets/` so Vite bundles them
+
+## Troubleshooting
+
+- Wails CLI not found: install via `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
+- Frontend deps missing: run `cd frontend && npm install`
+- OpenRouter errors (401/403): verify API key and base URL, then use the Test button
+- Ollama connection failed: ensure the daemon is running on `http://localhost:11434` and the model is available
+- No models listed: click Load models in the provider editor or enter a model ID manually
+- JSON parse failures: the runner retries briefly; if persistent, try a different model or adjust the default model for the provider
+
+## Security
+
+- Do not commit secrets. API keys are stored locally in SQLite and masked in the UI
+- Review `wails.json` before modifying build hooks
+
+## License
+
+No license has been declared for this repository yet.

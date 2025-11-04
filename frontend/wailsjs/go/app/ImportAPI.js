@@ -5,3 +5,7 @@
 export function ImportBase64(arg1) {
   return window['go']['app']['ImportAPI']['ImportBase64'](arg1);
 }
+
+export function ParseBase64(arg1) {
+  return window['go']['app']['ImportAPI']['ParseBase64'](arg1);
+}

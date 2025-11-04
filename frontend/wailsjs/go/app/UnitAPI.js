@@ -5,3 +5,7 @@
 export function ListByFile(arg1) {
   return window['go']['app']['UnitAPI']['ListByFile'](arg1);
 }
+
+export function UpsertBatch(arg1, arg2) {
+  return window['go']['app']['UnitAPI']['UpsertBatch'](arg1, arg2);
+}

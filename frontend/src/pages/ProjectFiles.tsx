@@ -15,7 +15,7 @@ function guessFormat(filename: string): string {
   const f = filename.toLowerCase()
   if (f.endsWith('.json')) return 'paraglidejson'
   if (f.endsWith('.csv')) return 'csv'
-  if (f.endsWith('.txt') || f.endsWith('.vdf') || f.includes('half-life')) return 'valvevdf'
+  if (f.endsWith('.vdf') || f.endsWith('.txt') || f.includes('half-life') || f.includes('valve')) return 'valvevdf'
   return 'paraglidejson'
 }
 
@@ -58,6 +58,8 @@ export default function ProjectFilesPage() {
 
   const doImport = async () => {
     if (!file) return
+    if (!format) { setError('Select a format.'); return }
+    if (!locale.trim()) { setError('Locale is required.'); return }
     setBusy(true)
     try {
       setError(null)
@@ -113,12 +115,13 @@ export default function ProjectFilesPage() {
             <div className="flex flex-col items-center justify-center gap-2">
               <UploadCloud className="h-6 w-6 text-muted-foreground"/>
               <div className="text-sm text-muted-foreground">Drag & drop or choose a file</div>
-              <input type="file" onChange={onSelectFile} className="hidden" id="fileinput" />
+              <div className="text-xs text-muted-foreground">Supported: .json (Paraglide), .csv (CSV), .vdf or .txt (Valve VDF)</div>
+              <input type="file" onChange={onSelectFile} className="hidden" id="fileinput" accept=".json,.csv,.vdf,.txt" />
               <Button variant="outline" onClick={() => (document.getElementById('fileinput') as HTMLInputElement)?.click()}>Browse…</Button>
               {file && <div className="text-xs text-muted-foreground">Selected: {file.name}</div>}
             </div>
           </div>
-          <Button onClick={doImport} disabled={!file || busy} className="w-fit">Import</Button>
+          <Button onClick={doImport} disabled={!file || busy || !locale.trim()} className="w-fit">Import</Button>
         </CardContent>
       </Card>
 

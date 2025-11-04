@@ -3,6 +3,7 @@ package csv
 import (
     "bytes"
     "encoding/csv"
+    "strings"
     "locail/internal/ports"
 )
 
@@ -15,6 +16,18 @@ func (e *Exporter) Format() string { return "csv" }
 func (e *Exporter) Export(language string, items []ports.ExportItem) ([]byte, error) {
     var buf bytes.Buffer
     w := csv.NewWriter(&buf)
+    // Allow separator selection via language hint: "sep:comma|semicolon|tab"
+    if strings.HasPrefix(strings.ToLower(language), "sep:") {
+        typ := strings.TrimSpace(strings.ToLower(strings.TrimPrefix(language, "sep:")))
+        switch typ {
+        case "semicolon":
+            w.Comma = ';'
+        case "tab":
+            w.Comma = '\t'
+        default:
+            w.Comma = ','
+        }
+    }
     _ = w.Write([]string{"key", "source", "translation"})
     for _, it := range items {
         v := it.Translation
@@ -24,4 +37,3 @@ func (e *Exporter) Export(language string, items []ports.ExportItem) ([]byte, er
     w.Flush()
     return buf.Bytes(), nil
 }
-

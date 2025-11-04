@@ -53,6 +53,13 @@ type TranslateUnitParams struct {
     Model        string   `json:"model"`
 }
 
+// TranslateUnitsParams describes a batch of specific units to translate sequentially.
+type TranslateUnitsParams struct {
+    UnitIDs      []int64  `json:"unit_ids"`
+    Locales      []string `json:"locales"`
+    Model        string   `json:"model"`
+}
+
 func (r *Runner) StartTranslateFile(ctx context.Context, projectID, providerID int64, p TranslateFileParams) (int64, error) {
     // Resolve model: if empty, use provider default
     if p.Model == "" {
@@ -210,6 +217,73 @@ func (r *Runner) runTranslateUnit(ctx context.Context, jobID, providerID int64, 
         done++
         _ = r.d.Jobs.UpdateProgress(ctx, jobID, done, total, "running")
         if r.em != nil { r.em.Emit("job.progress", map[string]any{"job_id": jobID, "done": done, "total": total, "status": "running", "model": p.Model}) }
+    }
+    _ = r.d.Jobs.UpdateProgress(ctx, jobID, done, total, "done")
+    if r.em != nil { r.em.Emit("job.progress", map[string]any{"job_id": jobID, "done": done, "total": total, "status": "done", "model": p.Model}) }
+}
+
+// StartTranslateUnits creates a single job to translate multiple specific units sequentially for given locales.
+func (r *Runner) StartTranslateUnits(ctx context.Context, projectID, providerID int64, p TranslateUnitsParams) (int64, error) {
+    // Resolve/normalize model
+    if p.Model == "" {
+        if prov, err := r.d.Providers.Get(ctx, providerID); err == nil && prov != nil { p.Model = prov.Model }
+    }
+    if norm, err := r.normalizeModel(ctx, providerID, p.Model); err == nil && norm != "" { p.Model = norm }
+    // Compute total missing items
+    total := 0
+    for _, uid := range p.UnitIDs {
+        for _, tgt := range p.Locales {
+            if t, _ := r.d.Translations.Get(ctx, uid, tgt); t == nil || strings.TrimSpace(t.Text) == "" {
+                total++
+            }
+        }
+    }
+    paramsJSON, _ := json.Marshal(p)
+    job := &domain.Job{Type: "translate_units", Status: "queued", ProjectID: &projectID, ProviderID: &providerID, ParamsRaw: string(paramsJSON), Progress: 0, Total: total}
+    id, err := r.d.Jobs.Create(ctx, job)
+    if err != nil { return 0, err }
+    _ = r.d.Jobs.UpdateProgress(ctx, id, 0, total, "running")
+    if r.em != nil { r.em.Emit("job.started", map[string]any{"job_id": id, "total": total, "model": p.Model, "provider_id": providerID}) }
+    cctx, cancel := context.WithCancel(context.Background())
+    r.mu.Lock(); r.active[id] = cancel; r.mu.Unlock()
+    go r.runTranslateUnits(cctx, id, providerID, p)
+    return id, nil
+}
+
+func (r *Runner) runTranslateUnits(ctx context.Context, jobID, providerID int64, p TranslateUnitsParams) {
+    done := 0
+    total := 0
+    for range p.UnitIDs {
+        for range p.Locales { total++ }
+    }
+    for _, uid := range p.UnitIDs {
+        select { case <-ctx.Done(): _ = r.d.Jobs.UpdateProgress(ctx, jobID, done, total, "canceled"); return; default: }
+        u, err := r.d.Units.Get(ctx, uid)
+        if err != nil || u == nil { continue }
+        for _, tgt := range p.Locales {
+            // Skip existing
+            if t, _ := r.d.Translations.Get(ctx, u.ID, tgt); t != nil && strings.TrimSpace(t.Text) != "" {
+                continue
+            }
+            item := &domain.JobItem{JobID: jobID, UnitID: &u.ID, Locale: &tgt, Status: "running"}
+            itemID, _ := r.d.Jobs.AddItem(ctx, item)
+            if r.em != nil { r.em.Emit("job.item.start", map[string]any{"job_id": jobID, "unit_id": u.ID, "key": u.Key, "locale": tgt, "model": p.Model}) }
+            ictx, cancel := context.WithTimeout(ctx, 60*time.Second)
+            txt, err := r.trans.TranslateOne(ictx, translator.TranslateArgs{ProviderID: providerID, Unit: u, SourceLang: "", TargetLang: tgt, Model: p.Model})
+            cancel()
+            if err != nil {
+                _ = r.d.Jobs.UpdateItem(ctx, itemID, "failed", err.Error())
+                if r.em != nil { r.em.Emit("job.item.done", map[string]any{"job_id": jobID, "unit_id": u.ID, "key": u.Key, "locale": tgt, "error": err.Error(), "model": p.Model}) }
+            } else {
+                tr := &domain.Translation{UnitID: u.ID, Locale: tgt, Text: txt, Status: "machine"}
+                _ = r.d.Translations.Upsert(ctx, tr)
+                _ = r.d.Jobs.UpdateItem(ctx, itemID, "done", "")
+                if r.em != nil { r.em.Emit("job.item.done", map[string]any{"job_id": jobID, "unit_id": u.ID, "key": u.Key, "locale": tgt, "text": txt, "model": p.Model}) }
+            }
+            done++
+            _ = r.d.Jobs.UpdateProgress(ctx, jobID, done, total, "running")
+            if r.em != nil { r.em.Emit("job.progress", map[string]any{"job_id": jobID, "done": done, "total": total, "status": "running", "model": p.Model}) }
+        }
     }
     _ = r.d.Jobs.UpdateProgress(ctx, jobID, done, total, "done")
     if r.em != nil { r.em.Emit("job.progress", map[string]any{"job_id": jobID, "done": done, "total": total, "status": "done", "model": p.Model}) }

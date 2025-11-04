@@ -43,6 +43,21 @@ func (a *JobsAPI) StartTranslateUnit(req StartTranslateUnitRequest) (StartJobRes
     return StartJobResponse{JobID: jid}, nil
 }
 
+type StartTranslateUnitsRequest struct {
+    ProjectID  int64     `json:"project_id"`
+    ProviderID int64     `json:"provider_id"`
+    UnitIDs    []int64   `json:"unit_ids"`
+    Locales    []string  `json:"locales"`
+    Model      string    `json:"model"`
+}
+
+func (a *JobsAPI) StartTranslateUnits(req StartTranslateUnitsRequest) (StartJobResponse, error) {
+    ctx := context.Background()
+    jid, err := a.r.StartTranslateUnits(ctx, req.ProjectID, req.ProviderID, jobs.TranslateUnitsParams{UnitIDs: req.UnitIDs, Locales: req.Locales, Model: req.Model})
+    if err != nil { return StartJobResponse{}, err }
+    return StartJobResponse{JobID: jid}, nil
+}
+
 func (a *JobsAPI) Cancel(jobID int64) bool { return a.r.Cancel(jobID) }
 
 // Status endpoints

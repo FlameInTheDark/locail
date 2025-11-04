@@ -19,6 +19,7 @@ type FileRepository interface {
     Create(ctx context.Context, f *domain.File) error
     Get(ctx context.Context, id int64) (*domain.File, error)
     ListByProject(ctx context.Context, projectID int64) ([]*domain.File, error)
+    Delete(ctx context.Context, id int64) error
 }
 
 type UnitRepository interface {

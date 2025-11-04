@@ -33,3 +33,7 @@ export function StartTranslateFile(arg1) {
 export function StartTranslateUnit(arg1) {
   return window['go']['app']['JobsAPI']['StartTranslateUnit'](arg1);
 }
+
+export function StartTranslateUnits(arg1) {
+  return window['go']['app']['JobsAPI']['StartTranslateUnits'](arg1);
+}

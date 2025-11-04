@@ -3,3 +3,5 @@
 import {app} from '../models';
 
 export function ImportBase64(arg1:app.ImportRequest):Promise<app.ImportResponse>;
+
+export function ParseBase64(arg1:app.ImportRequest):Promise<app.ParseResponse>;

@@ -17,3 +17,5 @@ export function Logs(arg1:number,arg2:number):Promise<Array<app.JobLogDTO>>;
 export function StartTranslateFile(arg1:app.StartTranslateFileRequest):Promise<app.StartJobResponse>;
 
 export function StartTranslateUnit(arg1:app.StartTranslateUnitRequest):Promise<app.StartJobResponse>;
+
+export function StartTranslateUnits(arg1:app.StartTranslateUnitsRequest):Promise<app.StartJobResponse>;

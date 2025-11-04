@@ -140,6 +140,54 @@ export namespace app {
 	        this.ContextTokens = source["ContextTokens"];
 	    }
 	}
+	export class UnitKV {
+	    key: string;
+	    source: string;
+	    context?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UnitKV(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.source = source["source"];
+	        this.context = source["context"];
+	    }
+	}
+	export class ParseResponse {
+	    locale: string;
+	    items: UnitKV[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ParseResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.locale = source["locale"];
+	        this.items = this.convertValues(source["items"], UnitKV);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class ProviderTestResult {
 	    ok: boolean;
 	    translation?: string;
@@ -210,6 +258,27 @@ export namespace app {
 	        this.model = source["model"];
 	    }
 	}
+	export class StartTranslateUnitsRequest {
+	    project_id: number;
+	    provider_id: number;
+	    unit_ids: number[];
+	    locales: string[];
+	    model: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new StartTranslateUnitsRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.project_id = source["project_id"];
+	        this.provider_id = source["provider_id"];
+	        this.unit_ids = source["unit_ids"];
+	        this.locales = source["locales"];
+	        this.model = source["model"];
+	    }
+	}
+	
 	export class UnitText {
 	    unit_id: number;
 	    key: string;
@@ -228,6 +297,24 @@ export namespace app {
 	        this.source = source["source"];
 	        this.translation = source["translation"];
 	        this.status = source["status"];
+	    }
+	}
+	export class UpsertItem {
+	    key: string;
+	    source: string;
+	    context: string;
+	    metadata_json: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpsertItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.source = source["source"];
+	        this.context = source["context"];
+	        this.metadata_json = source["metadata_json"];
 	    }
 	}
 	export class UpsertTranslationRequest {

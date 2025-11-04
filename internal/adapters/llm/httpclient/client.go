@@ -21,7 +21,8 @@ type Client struct {
 }
 
 func New(providerType, apiKey, baseURL, model string) *Client {
-    c := resty.New().SetTimeout(20 * time.Second)
+    // Increase default HTTP timeout to 30s to accommodate slower local/remote providers
+    c := resty.New().SetTimeout(30 * time.Second)
     return &Client{ProviderType: strings.ToLower(providerType), APIKey: apiKey, BaseURL: baseURL, Model: model, http: c}
 }
 
