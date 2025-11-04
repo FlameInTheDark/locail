@@ -1,34 +1,55 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 
-type TranslationMap = Record<string, string>
+import * as ProjectAPI from '../wailsjs/go/app/ProjectAPI'
+import * as FileAPI from '../wailsjs/go/app/FileAPI'
+import * as TranslationsAPI from '../wailsjs/go/app/TranslationsAPI'
+import * as JobsAPI from '../wailsjs/go/app/JobsAPI'
+import * as ProviderAPI from '../wailsjs/go/app/ProviderAPI'
+import * as ExportAPI from '../wailsjs/go/app/ExportAPI'
 
-type Entry = {
-  key: string
-  source: string
-  translations?: TranslationMap
-  notes?: string
+const placeholderRegex = /\{[^\}]+\}|%[sdif]|:\w+/g
+
+type ProjectRecord = {
+  id: number
+  name: string
+  sourceLang: string
+  locales: string[]
 }
 
 type FileRecord = {
+  id: number
   path: string
-  entries: Entry[]
+  format?: string
+  locale?: string
 }
 
-type Project = {
-  id: string
-  name: string
-  languages: string[]
-  files: FileRecord[]
+type Entry = {
+  unitId: number
+  key: string
+  source: string
+  translation: string
+  draft: string
+  status: string
 }
 
 type Suggestion = { label: string; value: string }
 
+type ProviderInfo = {
+  id: number
+  type: string
+  name: string
+  base_url?: string
+  model?: string
+  api_key?: string
+}
+
 type ProviderSettings = {
-  provider: string
+  providerId: number | null
+  providerType: string
   baseUrl: string
   model: string
-  apiKey: string
+  apiKeyMasked?: string
 }
 
 type TranslationOptions = {
@@ -38,64 +59,27 @@ type TranslationOptions = {
   preservePlaceholders: boolean
 }
 
-const placeholderRegex = /\{[^\}]+\}|%[sdif]|:\w+/g
-
-const demoProject: Project = {
-  id: 'proj1',
-  name: 'Demo App',
-  languages: ['en', 'ru', 'de', 'es', 'fr'],
-  files: [
-    {
-      path: 'i18n/common.json',
-      entries: [
-        { key: 'app.title', source: 'Welcome to Gochat', translations: { ru: 'Добро пожаловать в Gochat' } },
-        { key: 'nav.home', source: 'Home', translations: {} },
-        { key: 'nav.settings', source: 'Settings', translations: { ru: 'Настройки' } },
-        { key: 'msg.unread_count', source: '{count} unread message', translations: {}, notes: 'plural' },
-        { key: 'btn.save', source: 'Save', translations: { ru: 'Сохранить' } },
-        { key: 'auth.sign_in', source: 'Sign in', translations: {} },
-        { key: 'auth.sign_out', source: 'Sign out', translations: { ru: 'Выйти' } },
-        { key: 'errors.network', source: 'Network error. Please try again.', translations: {} },
-        { key: 'channel.joined', source: 'You joined the channel {name}', translations: {} },
-      ],
-    },
-    {
-      path: 'i18n/errors.json',
-      entries: [
-        { key: 'error.unknown', source: 'An unknown error occurred.', translations: {} },
-        { key: 'error.timeout', source: 'Request timed out after {seconds}s', translations: {} },
-      ],
-    },
-  ],
+type JobProgress = {
+  jobId: number | null
+  done: number
+  total: number
+  status: string
+  model?: string
 }
 
-const tinyDictRU = new Map(
-  Object.entries({
-    welcome: 'добро пожаловать',
-    home: 'главная',
-    settings: 'настройки',
-    save: 'сохранить',
-    sign: 'войти',
-    'sign in': 'войти',
-    'sign out': 'выйти',
-    network: 'сеть',
-    error: 'ошибка',
-    please: 'пожалуйста',
-    try: 'попробуйте',
-    again: 'снова',
-    request: 'запрос',
-    timed: 'превышено',
-    out: 'время',
-    after: 'после',
-    unknown: 'неизвестная',
-    message: 'сообщение',
-    unread: 'непрочитанное',
-    you: 'вы',
-    joined: 'присоединились',
-    the: '',
-    channel: 'канал',
-  })
-)
+type JobItemState = {
+  key?: string
+  locale?: string
+  model?: string
+}
+
+type JobLastResult = {
+  key?: string
+  locale?: string
+  text?: string
+  error?: string
+  model?: string
+}
 
 function formatNumber(n: number) {
   return new Intl.NumberFormat().format(n)
@@ -113,37 +97,8 @@ function placeholdersOk(src?: string, tgt?: string) {
   return srcTokens.every(token => tgtTokens.includes(token))
 }
 
-function fakeTranslateToRU(text: string) {
-  const placeholders: Record<string, string> = {}
-  let counter = 0
-  const masked = text.replace(/(\{[^\}]+\}|%[sdif]|:\w+)/g, match => {
-    const token = `§§${counter++}§§`
-    placeholders[token] = match
-    return token
-  })
-
-  const translated = masked
-    .split(/(\W+)/)
-    .map(token => {
-      const lower = token.toLowerCase()
-      if (tinyDictRU.has(lower)) {
-        const value = tinyDictRU.get(lower) || ''
-        if (/[A-Z]/.test(token[0] || '')) {
-          return value.charAt(0).toUpperCase() + value.slice(1)
-        }
-        return value
-      }
-      return token
-    })
-    .join(' ')
-    .replace(/\s+(\W)/g, '$1')
-    .replace(/\s{2,}/g, ' ')
-
-  return translated.replace(/§§\d+§§/g, token => placeholders[token])
-}
-
-function download(filename: string, data: string) {
-  const blob = new Blob([data], { type: 'application/json;charset=utf-8' })
+function download(filename: string, data: string, mime = 'application/json;charset=utf-8') {
+  const blob = new Blob([data], { type: mime })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -152,9 +107,21 @@ function download(filename: string, data: string) {
   URL.revokeObjectURL(url)
 }
 
-function fileBase(path: string) {
-  const parts = path.split('/')
-  return parts[parts.length - 1]
+function downloadBase64(filename: string, base64: string, mime = 'application/octet-stream') {
+  if (!base64) return
+  const binary = atob(base64)
+  const len = binary.length
+  const bytes = new Uint8Array(len)
+  for (let i = 0; i < len; i += 1) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  const blob = new Blob([bytes], { type: mime })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 type TranslationRowProps = {
@@ -185,7 +152,7 @@ function TranslationRow({ entry, targetLang, value, suggestions, checked, onTogg
       </td>
       <td className="px-3 py-2 align-top font-mono text-xs text-slate-700 truncate key">{entry.key}</td>
       <td className="px-3 py-2 align-top text-slate-800 source">{entry.source}</td>
-      <td className="px-3 py-2 align-top text-slate-500 old">{entry.translations?.[targetLang] || '—'}</td>
+      <td className="px-3 py-2 align-top text-slate-500 old">{entry.translation || '—'}</td>
       <td className="px-3 py-2 align-top">
         <textarea
           ref={textareaRef}
@@ -210,7 +177,7 @@ function TranslationRow({ entry, targetLang, value, suggestions, checked, onTogg
             Suggestions…
           </option>
           {suggestions.map(option => (
-            <option key={option.label} value={option.value}>
+            <option key={`${entry.unitId}-${option.label}`} value={option.value}>
               {option.label}: {option.value.length > 40 ? `${option.value.slice(0, 40)}…` : option.value}
             </option>
           ))}
@@ -269,24 +236,30 @@ function useKeyboardShortcuts(onFocusSearch: () => void, onSave: () => void) {
   }, [onFocusSearch, onSave])
 }
 
+type FileStats = Record<number, { total: number; translated: number }>
+
 function App() {
-  const [projects, setProjects] = useState<Project[]>([demoProject])
-  const [selectedProjectId, setSelectedProjectId] = useState('proj1')
-  const [selectedFilePath, setSelectedFilePath] = useState(demoProject.files[0].path)
-  const [srcLang] = useState('en')
-  const [targetLang, setTargetLang] = useState('ru')
+  const [projects, setProjects] = useState<ProjectRecord[]>([])
+  const [files, setFiles] = useState<FileRecord[]>([])
+  const [fileStats, setFileStats] = useState<FileStats>({})
+  const [entries, setEntries] = useState<Entry[]>([])
+  const [providers, setProviders] = useState<ProviderInfo[]>([])
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null)
+  const [selectedFileId, setSelectedFileId] = useState<number | null>(null)
+  const [targetLang, setTargetLang] = useState('')
   const [search, setSearch] = useState('')
   const [onlyUntranslated, setOnlyUntranslated] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [status, setStatus] = useState('Ready.')
   const [activeTab, setActiveTab] = useState<'projects' | 'files' | 'settings'>('projects')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [selection, setSelection] = useState<Set<string>>(new Set())
+  const [selection, setSelection] = useState<Set<number>>(new Set())
   const [providerSettings, setProviderSettings] = useState<ProviderSettings>({
-    provider: 'openai',
+    providerId: null,
+    providerType: '',
     baseUrl: '',
-    model: 'gpt-4o-mini',
-    apiKey: '',
+    model: '',
+    apiKeyMasked: '',
   })
   const [translationOptions, setTranslationOptions] = useState<TranslationOptions>({
     formality: 'auto',
@@ -294,217 +267,459 @@ function App() {
     glossary: '',
     preservePlaceholders: true,
   })
+  const [jobProgress, setJobProgress] = useState<JobProgress>({ jobId: null, done: 0, total: 0, status: 'idle' })
+  const [currentItem, setCurrentItem] = useState<JobItemState>({})
+  const [lastResult, setLastResult] = useState<JobLastResult>({})
 
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   const memory = useTranslationMemory()
 
-  const project = useMemo(() => projects.find(p => p.id === selectedProjectId), [projects, selectedProjectId])
-  const fileRecord = useMemo(() => project?.files.find(f => f.path === selectedFilePath), [project, selectedFilePath])
+  const selectedProject = useMemo(
+    () => projects.find(p => p.id === selectedProjectId) ?? null,
+    [projects, selectedProjectId],
+  )
+  const srcLang = selectedProject?.sourceLang || 'en'
+  const availableLanguages = useMemo(() => {
+    if (!selectedProject) return []
+    const set = new Set<string>()
+    if (selectedProject.sourceLang) set.add(selectedProject.sourceLang)
+    selectedProject.locales.forEach(loc => {
+      if (loc) set.add(loc)
+    })
+    return Array.from(set)
+  }, [selectedProject])
+  const selectedFile = useMemo(
+    () => files.find(f => f.id === selectedFileId) ?? null,
+    [files, selectedFileId],
+  )
+
+  const loadProjects = useCallback(async () => {
+    setStatus('Loading projects…')
+    try {
+      const res = await (ProjectAPI as any).List()
+      const list: ProjectRecord[] = []
+      for (const p of res || []) {
+        let locales: string[] = []
+        try {
+          const locs = await (ProjectAPI as any).ListLocales(p.id)
+          locales = (locs || []).map((l: any) => l.locale).filter(Boolean)
+        } catch (err) {
+          console.error(err)
+        }
+        list.push({ id: p.id, name: p.name, sourceLang: p.source_lang || '', locales })
+      }
+      setProjects(list)
+      if (list.length === 0) {
+        setSelectedProjectId(null)
+      } else {
+        setSelectedProjectId(prev => (prev && list.some(p => p.id === prev) ? prev : list[0].id))
+      }
+      setStatus(`Loaded ${list.length} project${list.length === 1 ? '' : 's'}.`)
+    } catch (error: any) {
+      console.error(error)
+      setStatus(`Failed to load projects: ${String(error?.message || error)}`)
+    }
+  }, [])
+
+  const loadFiles = useCallback(async (projectId: number) => {
+    setStatus('Loading files…')
+    try {
+      const res = await (FileAPI as any).ListByProject(projectId)
+      const list: FileRecord[] = (res || []).map((f: any) => ({ id: f.id, path: f.path, format: f.format, locale: f.locale }))
+      setFiles(list)
+      setSelectedFileId(prev => (prev && list.some(f => f.id === prev) ? prev : list[0]?.id ?? null))
+      setStatus(`Loaded ${list.length} file${list.length === 1 ? '' : 's'}.`)
+    } catch (error: any) {
+      console.error(error)
+      setFiles([])
+      setSelectedFileId(null)
+      setStatus(`Failed to load files: ${String(error?.message || error)}`)
+    }
+  }, [])
+
+  const loadEntries = useCallback(async (fileId: number | null, locale: string) => {
+    if (!fileId || !locale) {
+      setEntries([])
+      setSelection(new Set())
+      setDirty(false)
+      return
+    }
+    setStatus('Loading units…')
+    try {
+      const res = await (TranslationsAPI as any).ListUnitTexts(fileId, locale)
+      const list: Entry[] = (res || []).map((u: any) => ({
+        unitId: u.unit_id,
+        key: u.key,
+        source: u.source,
+        translation: u.translation || '',
+        draft: u.translation || '',
+        status: u.status || '',
+      }))
+      setEntries(list)
+      setSelection(new Set())
+      list.forEach(entry => {
+        if (entry.translation.trim()) {
+          memory.set(`${entry.source}|${locale}`, entry.translation)
+        }
+      })
+      setFileStats(prev => ({
+        ...prev,
+        [fileId]: { total: list.length, translated: list.filter(entry => entry.translation.trim() !== '').length },
+      }))
+      setDirty(false)
+      setStatus(`Loaded ${list.length} unit${list.length === 1 ? '' : 's'}.`)
+    } catch (error: any) {
+      console.error(error)
+      setEntries([])
+      setSelection(new Set())
+      setStatus(`Failed to load units: ${String(error?.message || error)}`)
+    }
+  }, [memory])
+
+  const loadProviders = useCallback(async () => {
+    try {
+      const res = await (ProviderAPI as any).List()
+      const list: ProviderInfo[] = res || []
+      setProviders(list)
+      if (list.length === 0) {
+        setProviderSettings({ providerId: null, providerType: '', baseUrl: '', model: '', apiKeyMasked: '' })
+      } else {
+        setProviderSettings(prev => {
+          const existing = prev.providerId ? list.find(p => p.id === prev.providerId) : undefined
+          const provider = existing ?? list[0]
+          return {
+            providerId: provider.id,
+            providerType: provider.type || '',
+            baseUrl: provider.base_url || '',
+            model: provider.model || '',
+            apiKeyMasked: provider.api_key || '',
+          }
+        })
+      }
+    } catch (error) {
+      console.error(error)
+    }
+  }, [])
 
   useEffect(() => {
-    if (!project) return
-    if (!project.files.some(f => f.path === selectedFilePath)) {
-      setSelectedFilePath(project.files[0]?.path ?? '')
-    }
-  }, [project, selectedFilePath])
+    loadProjects()
+    loadProviders()
+  }, [loadProjects, loadProviders])
 
   useEffect(() => {
-    if (!project) return
-    if (!project.languages.includes(targetLang)) {
-      const fallback = project.languages.find(lang => lang !== srcLang) || targetLang
-      setTargetLang(fallback)
+    if (selectedProjectId != null) {
+      loadFiles(selectedProjectId)
+    } else {
+      setFiles([])
+      setSelectedFileId(null)
+      setEntries([])
     }
-  }, [project, srcLang, targetLang])
+  }, [selectedProjectId, loadFiles])
 
-  const entries = useMemo(() => fileRecord?.entries ?? [], [fileRecord])
+  useEffect(() => {
+    if (!selectedProject) {
+      setTargetLang('')
+      return
+    }
+    const targets = availableLanguages.filter(lang => lang !== srcLang)
+    if (targets.length === 0) {
+      setTargetLang(srcLang)
+      return
+    }
+    if (!targetLang || (targetLang === srcLang && targets.length > 0) || !targets.includes(targetLang)) {
+      setTargetLang(targets[0])
+    }
+  }, [selectedProject, availableLanguages, srcLang, targetLang])
 
+  useEffect(() => {
+    if (selectedFileId && targetLang) {
+      loadEntries(selectedFileId, targetLang)
+    } else {
+      setEntries([])
+      setSelection(new Set())
+      setDirty(false)
+    }
+  }, [selectedFileId, targetLang, loadEntries])
+
+  useEffect(() => {
+    const rt = (window as any).runtime
+    if (!rt?.EventsOn) return
+    const offStarted = rt.EventsOn('job.started', (payload: any) => {
+      const jobId = payload?.job_id
+      if (!jobId) return
+      setJobProgress({ jobId, done: 0, total: payload?.total || 0, status: 'running', model: payload?.model })
+      setStatus(`Job #${jobId} started (${payload?.total || 0} items).`)
+    })
+    const offProgress = rt.EventsOn('job.progress', (payload: any) => {
+      const jobId = payload?.job_id
+      if (!jobId) return
+      setJobProgress(prev => ({
+        jobId,
+        done: payload?.done ?? prev.done,
+        total: payload?.total ?? prev.total,
+        status: payload?.status || prev.status,
+        model: payload?.model || prev.model,
+      }))
+    })
+    const offItemStart = rt.EventsOn('job.item.start', (payload: any) => {
+      setCurrentItem({ key: payload?.key, locale: payload?.locale, model: payload?.model })
+      if (payload?.key && payload?.locale === targetLang) {
+        setStatus(`Translating ${payload.key} (${payload.locale})…`)
+      }
+    })
+    const offItemDone = rt.EventsOn('job.item.done', (payload: any) => {
+      setLastResult({ key: payload?.key, locale: payload?.locale, text: payload?.text, error: payload?.error, model: payload?.model })
+      if (!payload?.unit_id || payload?.locale !== targetLang) return
+      setEntries(prev => {
+        const next = prev.map(entry => {
+          if (entry.unitId === payload.unit_id) {
+            const text = payload?.text ?? entry.translation
+            const updated: Entry = {
+              ...entry,
+              translation: text,
+              draft: text,
+              status: payload?.error ? entry.status : 'machine',
+            }
+            if (text?.trim()) {
+              memory.set(`${updated.source}|${targetLang}`, text)
+            }
+            return updated
+          }
+          return entry
+        })
+        const translatedCount = next.filter(entry => entry.translation.trim() !== '').length
+        if (selectedFileId) {
+          setFileStats(fs => ({ ...fs, [selectedFileId]: { total: next.length, translated: translatedCount } }))
+        }
+        setDirty(next.some(entry => entry.draft !== entry.translation))
+        if (payload?.error) {
+          setStatus(`Translation failed for ${payload.key || payload.unit_id}: ${payload.error}`)
+        } else if (payload?.text) {
+          setStatus(`Translated ${payload.key || payload.unit_id}.`)
+        }
+        return next
+      })
+    })
+    const offLog = rt.EventsOn('job.log', (payload: any) => {
+      if (!payload?.message) return
+      setStatus(`Job log: ${payload.message}`)
+    })
+    return () => {
+      try { rt.EventsOff('job.started', 'job.progress', 'job.item.start', 'job.item.done', 'job.log') } catch (err) { console.error(err) }
+      if (typeof offStarted === 'function') offStarted()
+      if (typeof offProgress === 'function') offProgress()
+      if (typeof offItemStart === 'function') offItemStart()
+      if (typeof offItemDone === 'function') offItemDone()
+      if (typeof offLog === 'function') offLog()
+    }
+  }, [targetLang, selectedFileId, memory])
+
+  const entriesList = entries
   const filteredEntries = useMemo(() => {
-    let list = entries
+    let list = entriesList
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(entry => {
-        const translated = entry.translations?.[targetLang] || ''
         return (
           entry.key.toLowerCase().includes(q) ||
           entry.source.toLowerCase().includes(q) ||
-          translated.toLowerCase().includes(q)
+          entry.draft.toLowerCase().includes(q) ||
+          entry.translation.toLowerCase().includes(q)
         )
       })
     }
     if (onlyUntranslated) {
       list = list.filter(entry => {
-        const translated = entry.translations?.[targetLang]
-        return !translated || translated.trim() === ''
+        const current = (entry.draft || entry.translation || '').trim()
+        return current === ''
       })
     }
     return list
-  }, [entries, search, onlyUntranslated, targetLang])
+  }, [entriesList, search, onlyUntranslated])
 
   const suggestionsFor = useCallback(
     (entry: Entry): Suggestion[] => {
       const list: Suggestion[] = []
-      const current = entry.translations?.[targetLang]
-      if (current) {
-        list.push({ label: `Previous (${targetLang})`, value: current })
+      if (entry.translation && entry.translation !== entry.draft) {
+        list.push({ label: 'Saved', value: entry.translation })
       }
       const mem = memory.get(`${entry.source}|${targetLang}`)
-      if (mem && mem !== current) {
+      if (mem && mem !== entry.draft && mem !== entry.translation) {
         list.push({ label: 'Memory', value: mem })
       }
-      if (targetLang === 'ru') {
-        const mt = fakeTranslateToRU(entry.source)
-        if (mt && mt !== current) {
-          list.push({ label: 'AI (demo)', value: mt })
-        }
-      }
-      if (entry.source && entry.source !== current) {
+      if (entry.source && entry.source !== entry.draft) {
         list.push({ label: 'Copy source', value: entry.source })
+      }
+      if (!list.length && entry.translation) {
+        list.push({ label: 'Saved', value: entry.translation })
       }
       return list
     },
-    [memory, targetLang]
+    [memory, targetLang],
   )
 
-  const updateEntry = useCallback(
-    (key: string, value: string) => {
-      setProjects(prev =>
-        prev.map(p => {
-          if (p.id !== selectedProjectId) return p
-          return {
-            ...p,
-            files: p.files.map(f => {
-              if (f.path !== selectedFilePath) return f
-              return {
-                ...f,
-                entries: f.entries.map(entry => {
-                  if (entry.key !== key) return entry
-                  return {
-                    ...entry,
-                    translations: { ...entry.translations, [targetLang]: value },
-                  }
-                }),
-              }
-            }),
-          }
-        })
-      )
-    },
-    [selectedFilePath, selectedProjectId, targetLang]
-  )
+  const handleEntryChange = useCallback((entry: Entry, value: string) => {
+    setEntries(prev => {
+      const next = prev.map(item => (item.unitId === entry.unitId ? { ...item, draft: value } : item))
+      setDirty(true)
+      return next
+    })
+  }, [])
+
+  const handleSuggestion = useCallback((entry: Entry, value: string) => {
+    setEntries(prev => {
+      const next = prev.map(item => (item.unitId === entry.unitId ? { ...item, draft: value } : item))
+      setDirty(true)
+      return next
+    })
+  }, [])
+
+  const handleToggle = useCallback((entry: Entry, checked: boolean) => {
+    setSelection(prev => {
+      const next = new Set(prev)
+      if (checked) next.add(entry.unitId)
+      else next.delete(entry.unitId)
+      return next
+    })
+  }, [])
 
   const clearSelection = useCallback(() => {
     setSelection(new Set())
   }, [])
 
-  const handleEntryChange = useCallback(
-    (entry: Entry, value: string) => {
-      updateEntry(entry.key, value)
-      setDirty(true)
-    },
-    [updateEntry]
-  )
-
-  const handleSuggestion = useCallback(
-    (entry: Entry, value: string) => {
-      updateEntry(entry.key, value)
-      setDirty(true)
-    },
-    [updateEntry]
-  )
-
-  const handleToggle = useCallback((entry: Entry, checked: boolean) => {
-    setSelection(prev => {
-      const next = new Set(prev)
-      if (checked) next.add(entry.key)
-      else next.delete(entry.key)
-      return next
-    })
-  }, [])
-
   const allFilteredSelected = useMemo(
-    () => filteredEntries.length > 0 && filteredEntries.every(entry => selection.has(entry.key)),
-    [filteredEntries, selection]
+    () => filteredEntries.length > 0 && filteredEntries.every(entry => selection.has(entry.unitId)),
+    [filteredEntries, selection],
   )
 
   const handleToggleAll = useCallback(() => {
     setSelection(prev => {
       const next = new Set(prev)
       if (filteredEntries.length === 0) return next
-      if (filteredEntries.every(entry => next.has(entry.key))) {
-        filteredEntries.forEach(entry => next.delete(entry.key))
+      if (filteredEntries.every(entry => next.has(entry.unitId))) {
+        filteredEntries.forEach(entry => next.delete(entry.unitId))
       } else {
-        filteredEntries.forEach(entry => next.add(entry.key))
+        filteredEntries.forEach(entry => next.add(entry.unitId))
       }
       return next
     })
   }, [filteredEntries])
 
-  const handleAiTranslate = useCallback(() => {
-    if (!fileRecord) return
-    let count = 0
-    fileRecord.entries.forEach(entry => {
-      if (!selection.has(entry.key)) return
-      const suggestion = suggestionsFor(entry).find(opt => opt.label.startsWith('AI'))
-      if (!suggestion) return
-      count += 1
-      updateEntry(entry.key, suggestion.value)
-      memory.set(`${entry.source}|${targetLang}`, suggestion.value)
-    })
-    if (count > 0) {
-      setDirty(true)
+  const handleAiTranslate = useCallback(async () => {
+    if (!selectedProjectId || !selectedFileId) {
+      setStatus('Select a project and file before translating.')
+      return
     }
-    setStatus(`AI filled ${count} entr${count === 1 ? 'y' : 'ies'} (demo).`)
-  }, [fileRecord, memory, selection, suggestionsFor, targetLang, updateEntry])
-
-  const handleSave = useCallback(() => {
-    if (!fileRecord) return
-    const output: Record<string, string> = {}
-    fileRecord.entries.forEach(entry => {
-      const value = entry.translations?.[targetLang] || ''
-      output[entry.key] = value
-      if (value.trim()) {
-        memory.set(`${entry.source}|${targetLang}`, value)
+    if (!providerSettings.providerId) {
+      setStatus('Configure a provider in Settings first.')
+      return
+    }
+    const locales = [targetLang].filter(Boolean)
+    if (locales.length === 0) {
+      setStatus('Select a target language first.')
+      return
+    }
+    const unitIds = entries.filter(entry => selection.has(entry.unitId)).map(entry => entry.unitId)
+    if (unitIds.length === 0) {
+      setStatus('Select at least one row to translate.')
+      return
+    }
+    let started = 0
+    for (const unitId of unitIds) {
+      try {
+        const res = await (JobsAPI as any).StartTranslateUnit({
+          project_id: selectedProjectId,
+          provider_id: providerSettings.providerId,
+          unit_id: unitId,
+          locales,
+          model: providerSettings.model,
+        })
+        const jobId = res?.job_id ?? res?.JobID
+        if (jobId) {
+          setJobProgress({ jobId, done: 0, total: locales.length, status: 'running', model: providerSettings.model })
+        }
+        started += 1
+      } catch (error) {
+        console.error(error)
       }
-    })
-    const filename = `${fileBase(selectedFilePath).replace(/\.json$/, '')}.${targetLang}.json`
-    download(filename, JSON.stringify(output, null, 2))
-    setDirty(false)
-    setStatus('Saved to file download.')
-  }, [fileRecord, memory, selectedFilePath, targetLang])
+    }
+    if (started > 0) {
+      setStatus(`Queued ${started} translation job${started === 1 ? '' : 's'}.`)
+    } else {
+      setStatus('No jobs started.')
+    }
+  }, [entries, selection, selectedProjectId, selectedFileId, providerSettings, targetLang])
+
+  const handleSave = useCallback(async () => {
+    if (!targetLang) {
+      setStatus('Select a target language before saving.')
+      return
+    }
+    const toSave = entries.filter(entry => entry.draft !== entry.translation)
+    if (toSave.length === 0) {
+      setStatus('Nothing to save.')
+      return
+    }
+    try {
+      for (const entry of toSave) {
+        await (TranslationsAPI as any).Upsert({ unit_id: entry.unitId, locale: targetLang, text: entry.draft, status: 'edited' })
+      }
+      const nextEntries = entries.map(entry => (entry.draft !== entry.translation ? { ...entry, translation: entry.draft, status: 'edited' } : entry))
+      nextEntries.forEach(entry => {
+        if (entry.translation.trim()) {
+          memory.set(`${entry.source}|${targetLang}`, entry.translation)
+        }
+      })
+      setEntries(nextEntries)
+      const translatedCount = nextEntries.filter(entry => entry.translation.trim() !== '').length
+      if (selectedFileId) {
+        setFileStats(prev => ({ ...prev, [selectedFileId]: { total: nextEntries.length, translated: translatedCount } }))
+      }
+      setDirty(nextEntries.some(entry => entry.draft !== entry.translation))
+      setStatus(`Saved ${toSave.length} entr${toSave.length === 1 ? 'y' : 'ies'}.`)
+    } catch (error: any) {
+      console.error(error)
+      setStatus(`Failed to save: ${String(error?.message || error)}`)
+    }
+  }, [entries, memory, selectedFileId, targetLang])
 
   const handleExportMemory = useCallback(() => {
     const json = JSON.stringify(memory.toJSON(), null, 2)
     download('translation-memory.json', json)
-    setStatus('Exported translation memory.')
+    setStatus('Exported translation memory JSON.')
   }, [memory])
 
   const handleImport = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0]
-      if (!file || !fileRecord) return
-      const text = await file.text()
+      if (!file) return
       try {
+        const text = await file.text()
         const data = JSON.parse(text) as Record<string, string>
-        Object.entries(data).forEach(([key, value]) => {
-          updateEntry(key, String(value ?? ''))
+        setEntries(prev => {
+          const next = prev.map(entry => (Object.prototype.hasOwnProperty.call(data, entry.key)
+            ? { ...entry, draft: String(data[entry.key] ?? '') }
+            : entry))
+          setDirty(true)
+          return next
         })
-        setDirty(true)
-        setStatus('Imported translations.')
+        setStatus('Imported translations. Review and save to persist.')
       } catch (error) {
+        console.error(error)
         setStatus('Invalid JSON file.')
       } finally {
         event.target.value = ''
       }
     },
-    [fileRecord, updateEntry]
+    [],
   )
 
   const totalEntries = entries.length
   const doneEntries = useMemo(
-    () => entries.filter(entry => (entry.translations?.[targetLang] || '').trim() !== '').length,
-    [entries, targetLang]
+    () => entries.filter(entry => entry.translation.trim() !== '').length,
+    [entries],
   )
   const shownEntries = filteredEntries.length
 
@@ -515,82 +730,126 @@ function App() {
         searchInputRef.current.select()
       }
     },
-    handleSave
+    handleSave,
   )
 
-  const handleSelectProject = useCallback(
-    (projectId: string) => {
-      setSelectedProjectId(projectId)
-      const nextProject = projects.find(p => p.id === projectId)
-      if (nextProject) {
-        setSelectedFilePath(nextProject.files[0]?.path ?? '')
-      }
-      setSelection(new Set())
-    },
-    [projects]
-  )
-
-  const handleSelectFile = useCallback((path: string) => {
-    setSelectedFilePath(path)
+  const handleSelectProject = useCallback((projectIdValue: string) => {
+    const id = Number(projectIdValue)
+    if (Number.isNaN(id)) return
+    setSelectedProjectId(id)
     setSelection(new Set())
   }, [])
 
-  const handleNewProject = useCallback(() => {
+  const handleSelectFile = useCallback((fileIdValue: string) => {
+    const id = Number(fileIdValue)
+    if (Number.isNaN(id)) return
+    setSelectedFileId(id)
+    setSelection(new Set())
+  }, [])
+
+  const handleNewProject = useCallback(async () => {
     const name = window.prompt('Project name?')?.trim()
     if (!name) return
-    const id = `proj${projects.length + 1}`
-    const newProject: Project = {
-      id,
-      name,
-      languages: ['en', 'ru'],
-      files: [
-        {
-          path: 'i18n/new.json',
-          entries: [],
-        },
-      ],
+    const source = window.prompt('Source language (e.g., en)?')?.trim() || 'en'
+    try {
+      await (ProjectAPI as any).Create(name, source)
+      setStatus('Project created.')
+      await loadProjects()
+    } catch (error: any) {
+      console.error(error)
+      setStatus(`Failed to create project: ${String(error?.message || error)}`)
     }
-    setProjects(prev => [...prev, newProject])
-    setSelectedProjectId(id)
-    setSelectedFilePath(newProject.files[0].path)
-    setSelection(new Set())
-    setStatus('Created new project.')
-  }, [projects])
+  }, [loadProjects])
 
-  const handleProviderChange = useCallback(
-    (field: keyof ProviderSettings, value: string) => {
-      setProviderSettings(prev => ({ ...prev, [field]: value }))
-    },
-    []
-  )
+  const selectProvider = useCallback((value: string) => {
+    const id = Number(value)
+    if (Number.isNaN(id)) {
+      setProviderSettings({ providerId: null, providerType: '', baseUrl: '', model: '', apiKeyMasked: '' })
+      return
+    }
+    const provider = providers.find(p => p.id === id)
+    if (!provider) {
+      setProviderSettings({ providerId: null, providerType: '', baseUrl: '', model: '', apiKeyMasked: '' })
+      return
+    }
+    setProviderSettings({
+      providerId: provider.id,
+      providerType: provider.type || '',
+      baseUrl: provider.base_url || '',
+      model: provider.model || '',
+      apiKeyMasked: provider.api_key || '',
+    })
+  }, [providers])
+
+  const handleProviderModelChange = useCallback((value: string) => {
+    setProviderSettings(prev => ({ ...prev, model: value }))
+  }, [])
 
   const handleOptionsChange = useCallback(
     (field: keyof TranslationOptions, value: string | boolean) => {
       setTranslationOptions(prev => ({ ...prev, [field]: value }))
     },
-    []
+    [],
   )
 
+  const handleDownload = useCallback(async () => {
+    if (!selectedFileId || !targetLang) {
+      setStatus('Select a file and target language to export.')
+      return
+    }
+    try {
+      const res = await (ExportAPI as any).ExportFileBase64({
+        file_id: selectedFileId,
+        locale: targetLang,
+        override_format: '',
+        language_name: targetLang,
+      })
+      const filename = res?.filename || `${(selectedFile?.path?.split('/').pop() || 'translations')}.${targetLang}.json`
+      downloadBase64(filename, res?.content_b64 || '', 'application/octet-stream')
+      setStatus(`Downloaded ${filename}.`)
+    } catch (error: any) {
+      console.error(error)
+      setStatus(`Export failed: ${String(error?.message || error)}`)
+    }
+  }, [selectedFileId, targetLang, selectedFile])
+
   const statusSection = (
-    <div className="border-t border-slate-200 p-3 text-xs text-slate-600 flex items-center justify-between">
+    <div className="border-t border-slate-200 p-3 text-xs text-slate-600 flex items-center justify-between gap-3 flex-wrap">
       <div>
         Status: <span id="status">{status}</span>
+        {jobProgress.jobId && (
+          <span className="ml-2 text-muted-foreground">
+            Job #{jobProgress.jobId}: {jobProgress.done}/{jobProgress.total} {jobProgress.status}
+            {jobProgress.model ? ` · model ${jobProgress.model}` : ''}
+          </span>
+        )}
+        {currentItem.key && (
+          <span className="ml-2 text-muted-foreground">Current: {currentItem.key} [{currentItem.locale}]</span>
+        )}
+        {lastResult.key && (
+          <span className="ml-2 text-muted-foreground">
+            Last: {lastResult.key} [{lastResult.locale}] {lastResult.error ? '✖' : '✓'}
+          </span>
+        )}
       </div>
-      <button
-        id="importBtn"
-        className="px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-50"
-        onClick={() => importInputRef.current?.click()}
-      >
-        Import JSON
-      </button>
-      <input
-        id="importInput"
-        ref={importInputRef}
-        type="file"
-        accept="application/json"
-        className="hidden"
-        onChange={handleImport}
-      />
+      <div className="flex items-center gap-2">
+        <button
+          id="importBtn"
+          className="px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-50"
+          onClick={() => importInputRef.current?.click()}
+          disabled={!selectedFileId}
+        >
+          Import JSON
+        </button>
+        <input
+          id="importInput"
+          ref={importInputRef}
+          type="file"
+          accept="application/json"
+          className="hidden"
+          onChange={handleImport}
+        />
+      </div>
     </div>
   )
 
@@ -651,7 +910,7 @@ function App() {
                 <select
                   id="projectSelect"
                   className="w-full rounded-xl border-slate-300 focus:ring-0"
-                  value={selectedProjectId}
+                  value={selectedProjectId ?? ''}
                   onChange={event => handleSelectProject(event.target.value)}
                 >
                   {projects.map(p => (
@@ -676,9 +935,9 @@ function App() {
                   {projects.map(p => (
                     <li key={p.id}>
                       <button
-                        className="w-full text-left px-2 py-1 rounded-lg hover:bg-slate-100"
+                        className={`w-full text-left px-2 py-1 rounded-lg hover:bg-slate-100 ${selectedProjectId === p.id ? 'bg-slate-100' : ''}`}
                         data-proj={p.id}
-                        onClick={() => handleSelectProject(p.id)}
+                        onClick={() => handleSelectProject(String(p.id))}
                       >
                         {p.name}
                       </button>
@@ -695,11 +954,11 @@ function App() {
                   <select
                     id="fileSelect"
                     className="w-full rounded-xl border-slate-300 focus:ring-0"
-                    value={selectedFilePath}
+                    value={selectedFileId ?? ''}
                     onChange={event => handleSelectFile(event.target.value)}
                   >
-                    {project?.files.map(file => (
-                      <option key={file.path} value={file.path}>
+                    {files.map(file => (
+                      <option key={file.id} value={file.id}>
                         {file.path}
                       </option>
                     ))}
@@ -709,7 +968,9 @@ function App() {
                   id="refreshFiles"
                   className="mt-6 px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50"
                   title="Refresh files"
-                  onClick={() => setStatus('Files refreshed.')}
+                  onClick={() => {
+                    if (selectedProjectId != null) loadFiles(selectedProjectId)
+                  }}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21 12a9 9 0 1 1-6.219-8.56" />
@@ -720,20 +981,21 @@ function App() {
               <div className="mt-4">
                 <label className="block text-xs font-medium text-slate-600 mb-1">All Files</label>
                 <ul id="fileTree" className="text-sm space-y-1">
-                  {project?.files.map(file => {
-                    const count = file.entries.length
-                    const untranslated = file.entries.filter(entry => !(entry.translations?.[targetLang])).length
-                    const current = file.path === selectedFilePath
+                  {files.map(file => {
+                    const stats = fileStats[file.id]
+                    const count = stats?.total ?? 0
+                    const untranslated = stats ? stats.total - stats.translated : 0
+                    const current = file.id === selectedFileId
                     return (
-                      <li key={file.path}>
+                      <li key={file.id}>
                         <button
                           className={`w-full text-left px-2 py-1 rounded-lg hover:bg-slate-100 ${current ? 'bg-slate-100' : ''}`}
                           data-file={file.path}
-                          onClick={() => handleSelectFile(file.path)}
+                          onClick={() => handleSelectFile(String(file.id))}
                         >
                           <span className="font-mono text-xs">{file.path}</span>
                           <span className="ml-2 text-xs text-slate-500">
-                            {untranslated}/{count}
+                            {formatNumber(untranslated)}/{formatNumber(count)}
                           </span>
                         </button>
                       </li>
@@ -753,47 +1015,49 @@ function App() {
                       <select
                         id="provider"
                         className="mt-1 w-full rounded-xl border-slate-300 focus:ring-0"
-                        value={providerSettings.provider}
-                        onChange={event => handleProviderChange('provider', event.target.value)}
+                        value={providerSettings.providerId ?? ''}
+                        onChange={event => selectProvider(event.target.value)}
                       >
-                        <option value="openai">OpenAI Compatible</option>
-                        <option value="anthropic">Anthropic Compatible</option>
-                        <option value="local">Local HTTP</option>
+                        {providers.length === 0 && <option value="">No providers configured</option>}
+                        {providers.map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} ({p.type})
+                          </option>
+                        ))}
                       </select>
                     </label>
                     <label className="text-sm">
                       Base URL
                       <input
                         id="baseUrl"
-                        className="mt-1 w-full rounded-xl border-slate-300"
-                        placeholder="https://api.example.com"
+                        className="mt-1 w-full rounded-xl border-slate-300 focus:ring-0"
                         value={providerSettings.baseUrl}
-                        onChange={event => handleProviderChange('baseUrl', event.target.value)}
+                        readOnly
                       />
                     </label>
                     <label className="text-sm">
                       Model
                       <input
                         id="model"
-                        className="mt-1 w-full rounded-xl border-slate-300"
-                        placeholder="gpt-4o-mini"
+                        className="mt-1 w-full rounded-xl border-slate-300 focus:ring-0"
                         value={providerSettings.model}
-                        onChange={event => handleProviderChange('model', event.target.value)}
+                        onChange={event => handleProviderModelChange(event.target.value)}
+                        placeholder="Override model"
                       />
                     </label>
                     <label className="col-span-2 text-sm">
                       API Key
                       <input
                         id="apiKey"
-                        type="password"
-                        className="mt-1 w-full rounded-xl border-slate-300"
-                        placeholder="••••••••"
-                        value={providerSettings.apiKey}
-                        onChange={event => handleProviderChange('apiKey', event.target.value)}
+                        className="mt-1 w-full rounded-xl border-slate-300 focus:ring-0"
+                        value={providerSettings.apiKeyMasked || ''}
+                        readOnly
+                        placeholder="Configured via Providers"
                       />
                     </label>
                   </div>
                 </div>
+
                 <div>
                   <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Translation Options</h3>
                   <div className="grid grid-cols-2 gap-2">
@@ -801,40 +1065,41 @@ function App() {
                       Formality
                       <select
                         id="formality"
-                        className="mt-1 w-full rounded-xl border-slate-300"
+                        className="mt-1 w-full rounded-xl border-slate-300 focus:ring-0"
                         value={translationOptions.formality}
                         onChange={event => handleOptionsChange('formality', event.target.value)}
                       >
-                        <option>auto</option>
-                        <option>formal</option>
-                        <option>informal</option>
+                        <option value="auto">Auto</option>
+                        <option value="formal">Formal</option>
+                        <option value="informal">Informal</option>
                       </select>
                     </label>
                     <label className="text-sm">
                       Tone
                       <select
                         id="tone"
-                        className="mt-1 w-full rounded-xl border-slate-300"
+                        className="mt-1 w-full rounded-xl border-slate-300 focus:ring-0"
                         value={translationOptions.tone}
                         onChange={event => handleOptionsChange('tone', event.target.value)}
                       >
-                        <option>neutral</option>
-                        <option>friendly</option>
-                        <option>concise</option>
-                        <option>marketing</option>
+                        <option value="neutral">Neutral</option>
+                        <option value="friendly">Friendly</option>
+                        <option value="playful">Playful</option>
+                        <option value="technical">Technical</option>
                       </select>
                     </label>
                     <label className="col-span-2 text-sm">
-                      Glossary (comma-separated terms)
-                      <input
+                      Glossary
+                      <textarea
                         id="glossary"
-                        className="mt-1 w-full rounded-xl border-slate-300"
-                        placeholder="user, server, channel"
+                        className="mt-1 w-full rounded-xl border-slate-300 px-2 py-1"
+                        rows={3}
                         value={translationOptions.glossary}
                         onChange={event => handleOptionsChange('glossary', event.target.value)}
+                        placeholder="Term=Translation per line"
                       />
                     </label>
-                    <label className="text-sm flex items-center gap-2 mt-1">
+                    <label className="col-span-2 flex items-center gap-2 text-sm">
                       <input
                         id="preservePlaceholders"
                         type="checkbox"
@@ -859,7 +1124,7 @@ function App() {
               <div className="flex items-center gap-2">
                 <label className="text-xs text-slate-600">Source</label>
                 <select id="srcLang" className="rounded-xl border-slate-300 text-sm" value={srcLang} onChange={() => {}}>
-                  <option value={srcLang}>English (en)</option>
+                  <option value={srcLang}>{srcLang}</option>
                 </select>
               </div>
               <div className="flex items-center gap-2">
@@ -873,7 +1138,7 @@ function App() {
                     clearSelection()
                   }}
                 >
-                  {project?.languages
+                  {availableLanguages
                     .filter(lang => lang !== srcLang)
                     .map(lang => (
                       <option key={lang} value={lang}>
@@ -924,14 +1189,14 @@ function App() {
                   title="Select all rows"
                   onClick={handleToggleAll}
                 >
-                  Select all
+                  {allFilteredSelected ? 'Unselect all' : 'Select all'}
                 </button>
                 <button
                   id="aiTranslateSelected"
                   className="px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 text-sm"
                   title="AI translate selected"
                   onClick={handleAiTranslate}
-                  disabled={selection.size === 0}
+                  disabled={selection.size === 0 || !providerSettings.providerId}
                 >
                   AI Translate
                 </button>
@@ -940,17 +1205,22 @@ function App() {
                   className="px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 text-sm"
                   title="Save (Ctrl/Cmd+S)"
                   onClick={handleSave}
+                  disabled={entries.length === 0}
                 >
                   Save
                 </button>
-                <a id="downloadLink" className="hidden px-3 py-2 rounded-xl border border-slate-200 text-sm" download>
+                <button
+                  className="px-3 py-2 rounded-xl border border-slate-200 text-sm"
+                  onClick={handleDownload}
+                  disabled={!selectedFileId}
+                >
                   Download
-                </a>
+                </button>
               </div>
             </div>
             <div className="mt-2 flex items-center gap-4 text-xs text-slate-600">
               <div>
-                File: <span id="currentFileLabel" className="font-medium">{selectedFilePath || '—'}</span>
+                File: <span id="currentFileLabel" className="font-medium">{selectedFile?.path || '—'}</span>
                 <span className={`ml-1 inline-block h-1.5 w-1.5 rounded-full bg-amber-400 align-middle ${dirty ? '' : 'hidden'}`} id="dirtyDot"></span>
               </div>
               <div id="counters">
@@ -970,7 +1240,7 @@ function App() {
                   <th className="px-3 py-2 w-10"></th>
                   <th className="px-3 py-2 w-[24ch]">Key</th>
                   <th className="px-3 py-2">Source</th>
-                  <th className="px-3 py-2 w-[28ch]">Old</th>
+                  <th className="px-3 py-2 w-[28ch]">Saved</th>
                   <th className="px-3 py-2 w-[36ch]">Translation</th>
                   <th className="px-3 py-2 w-[26ch]">Suggestions</th>
                   <th className="px-3 py-2 w-[12ch]">Checks</th>
@@ -979,12 +1249,12 @@ function App() {
               <tbody id="rows" className="divide-y divide-slate-200">
                 {filteredEntries.map(entry => (
                   <TranslationRow
-                    key={entry.key}
+                    key={entry.unitId}
                     entry={entry}
                     targetLang={targetLang}
-                    value={entry.translations?.[targetLang] || ''}
+                    value={entry.draft}
                     suggestions={suggestionsFor(entry)}
-                    checked={selection.has(entry.key)}
+                    checked={selection.has(entry.unitId)}
                     onToggle={checked => handleToggle(entry, checked)}
                     onChange={value => handleEntryChange(entry, value)}
                     onSuggestion={value => handleSuggestion(entry, value)}
