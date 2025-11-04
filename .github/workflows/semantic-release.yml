@@ -13,11 +13,25 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.after.outputs.new_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Get latest release (before)
+        id: before
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              const { data } = await github.repos.getLatestRelease({ owner: context.repo.owner, repo: context.repo.repo })
+              core.setOutput('tag', data.tag_name || '')
+            } catch (e) {
+              core.setOutput('tag', '')
+            }
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -32,3 +46,31 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN != '' && secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
         run: npx semantic-release
+
+      - name: Get latest release (after)
+        id: after
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prev = core.getInput('prev', { required: false })
+            let beforeTag = '${{ steps.before.outputs.tag }}'
+            try {
+              const { data } = await github.repos.getLatestRelease({ owner: context.repo.owner, repo: context.repo.repo })
+              const tag = data.tag_name || ''
+              core.setOutput('tag', tag)
+              if (tag && tag !== beforeTag) {
+                core.setOutput('new_tag', tag)
+              } else {
+                core.setOutput('new_tag', '')
+              }
+            } catch (e) {
+              core.setOutput('tag', '')
+              core.setOutput('new_tag', '')
+            }
+
+  build_artifacts:
+    name: Build & Attach Artifacts
+    needs: release
+    if: needs.release.outputs.new_tag != ''
+    uses: ./.github/workflows/release.yml
+    secrets: inherit

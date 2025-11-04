@@ -7,6 +7,9 @@ import (
     "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+// version is set at build time via -ldflags "-X main.version=..."
+var version = "dev"
+
 // App struct
 type App struct {
     ctx context.Context
@@ -37,6 +40,9 @@ func (a *App) Greet(name string) string {
 func (a *App) SetRunner(r *jobsusecase.Runner) {
     a.runner = r
 }
+
+// Version returns the application version embedded at build time.
+func (a *App) Version() string { return version }
 
 type wailsEmitter struct{ ctx context.Context }
 func (w wailsEmitter) Emit(name string, payload any) {

@@ -1,10 +1,19 @@
 name: Release
 
 on:
-  # Trigger when a GitHub Release is published (e.g., by semantic-release)
+  # Trigger when a GitHub Release is published (works if release event is emitted)
   release:
     types: [published]
-  # Also allow manual trigger
+  # Allow being called as a reusable workflow
+  workflow_call:
+    secrets:
+      GITHUB_TOKEN:
+        required: false
+  # Trigger after the Semantic Release workflow completes (works even when release events from GITHUB_TOKEN are suppressed)
+  workflow_run:
+    workflows: ["Semantic Release"]
+    types: [completed]
+  # Manual trigger
   workflow_dispatch: {}
 
 permissions:
@@ -12,12 +21,41 @@ permissions:
 
 env:
   CGO_ENABLED: "1"
-  VERSION: ${{ github.event.release.tag_name || github.ref_name || 'dev' }}
 
 jobs:
+  meta:
+    name: Determine version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.setver.outputs.version }}
+    steps:
+      - id: setver
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const eventName = context.eventName
+            // From release event
+            if (eventName === 'release') {
+              core.setOutput('version', context.payload.release.tag_name)
+              return
+            }
+            // Ensure upstream workflow succeeded before proceeding
+            if (eventName === 'workflow_run') {
+              const concl = context.payload.workflow_run?.conclusion
+              if (concl !== 'success') {
+                core.setFailed(`Upstream workflow conclusion: ${concl}`)
+                return
+              }
+            }
+            // Fallback: read latest release tag
+            const { data } = await github.repos.getLatestRelease({ owner: context.repo.owner, repo: context.repo.repo })
+            core.setOutput('version', data.tag_name)
   build-windows:
     name: Windows (amd64)
     runs-on: windows-latest
+    needs: meta
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,9 +94,9 @@ jobs:
         shell: pwsh
         run: |
           # Try with UPX maximum compression; fallback to non-UPX if it fails
-          wails build -clean -upx -upxflags '-9 --best --lzma' -nsis
+          wails build -clean -upx -upxflags '-9 --best --lzma' -nsis -ldflags "-s -w -X main.version=$env:VERSION"
           if ($LASTEXITCODE -ne 0) {
-            wails build -clean -nsis
+            wails build -clean -nsis -ldflags "-s -w -X main.version=$env:VERSION"
           }
 
       - name: Collect artifacts
@@ -83,6 +121,9 @@ jobs:
   build-linux:
     name: Linux (amd64)
     runs-on: ubuntu-latest
+    needs: meta
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -121,7 +162,8 @@ jobs:
       - name: Build (wails + UPX)
         run: |
           # Try with UPX maximum compression; fallback to non-UPX if it fails
-          wails build -clean -upx -upxflags "-9 --best --lzma" || wails build -clean
+          wails build -clean -upx -upxflags "-9 --best --lzma" -ldflags "-s -w -X main.version=${VERSION}" || \
+          wails build -clean -ldflags "-s -w -X main.version=${VERSION}"
 
       - name: Collect artifacts
         run: |
@@ -138,6 +180,9 @@ jobs:
   build-macos:
     name: macOS (amd64)
     runs-on: macos-13
+    needs: meta
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -173,7 +218,8 @@ jobs:
       - name: Build (wails + UPX)
         run: |
           # Try with UPX; if it fails on Mach-O, fall back to normal build
-          wails build -clean -upx -upxflags "-9 --best --lzma" || wails build -clean
+          wails build -clean -upx -upxflags "-9 --best --lzma" -ldflags "-s -w -X main.version=${VERSION}" || \
+          wails build -clean -ldflags "-s -w -X main.version=${VERSION}"
 
       - name: Collect artifacts
         run: |
@@ -190,6 +236,9 @@ jobs:
   build-macos-arm64:
     name: macOS (arm64)
     runs-on: macos-14
+    needs: meta
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -226,7 +275,8 @@ jobs:
         env:
           GOARCH: arm64
         run: |
-          wails build -clean -upx -upxflags "-9 --best --lzma" || wails build -clean
+          wails build -clean -upx -upxflags "-9 --best --lzma" -ldflags "-s -w -X main.version=${VERSION}" || \
+          wails build -clean -ldflags "-s -w -X main.version=${VERSION}"
 
       - name: Collect artifacts
         run: |
@@ -243,8 +293,7 @@ jobs:
   publish:
     name: Upload Release Assets
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
-    needs: [build-windows, build-linux, build-macos, build-macos-arm64]
+    needs: [meta, build-windows, build-linux, build-macos, build-macos-arm64]
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -260,7 +309,7 @@ jobs:
       - name: Upload assets to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.release.tag_name }}
+          tag_name: ${{ needs.meta.outputs.version }}
           files: |
             release_assets/*
           fail_on_unmatched_files: true
