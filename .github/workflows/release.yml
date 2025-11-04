@@ -6,9 +6,7 @@ on:
     types: [published]
   # Allow being called as a reusable workflow
   workflow_call:
-    secrets:
-      GITHUB_TOKEN:
-        required: false
+    inputs: {}
   # Trigger after the Semantic Release workflow completes (works even when release events from GITHUB_TOKEN are suppressed)
   workflow_run:
     workflows: ["Semantic Release"]
