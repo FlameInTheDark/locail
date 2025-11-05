@@ -151,10 +151,14 @@ jobs:
       - name: Install system deps (GTK/WebKit/UPX)
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libgtk-3-dev libglib2.0-dev
+          sudo apt-get install -y build-essential pkg-config libgtk-3-dev libglib2.0-dev libayatana-appindicator3-dev librsvg2-dev
           # WebKitGTK dev package (4.1 on newer Ubuntu, fallback to 4.0)
           sudo apt-get install -y libwebkit2gtk-4.1-dev || sudo apt-get install -y libwebkit2gtk-4.0-dev
           sudo apt-get install -y upx
+
+      - name: Detect WebKitGTK version
+        run: |
+          if pkg-config --exists webkit2gtk-4.1; then echo "WAILS_TAGS=webkitgtk_4_1" >> $GITHUB_ENV; else echo "WAILS_TAGS=" >> $GITHUB_ENV; fi
 
       - name: Install Wails CLI
         run: |
@@ -169,8 +173,8 @@ jobs:
       - name: Build (wails + UPX)
         run: |
           # Try with UPX maximum compression; fallback to non-UPX if it fails
-          wails build -clean -upx -upxflags "-9 --best --lzma" -ldflags "-s -w -X main.version=${VERSION}" || \
-          wails build -clean -ldflags "-s -w -X main.version=${VERSION}"
+          wails build -clean ${WAILS_TAGS:+-tags "$WAILS_TAGS"} -upx -upxflags "-9 --best --lzma" -ldflags "-s -w -X main.version=${VERSION}" || \
+          wails build -clean ${WAILS_TAGS:+-tags "$WAILS_TAGS"} -ldflags "-s -w -X main.version=${VERSION}"
 
       - name: Collect artifacts
         run: |
