@@ -111,10 +111,10 @@ jobs:
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           $zipName = "locail_${env:VERSION}_windows_amd64.zip"
           Compress-Archive -Path build\bin\* -DestinationPath (Join-Path artifacts $zipName)
-          # Copy NSIS installer if present and rename with version
-          $installer = Get-ChildItem -Path build\bin -Include *installer*.exe,*setup*.exe -File -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($null -ne $installer) {
-            Copy-Item $installer.FullName (Join-Path artifacts ("locail_${env:VERSION}_windows_amd64_installer.exe"))
+          # Copy all .exe files (includes NSIS installer) into artifacts with versioned names
+          Get-ChildItem -Path build\bin -Filter *.exe -File -ErrorAction SilentlyContinue | ForEach-Object {
+            $dst = Join-Path artifacts ("locail_${env:VERSION}_windows_amd64_" + $_.Name)
+            Copy-Item $_.FullName $dst
           }
 
       - name: Upload artifact
