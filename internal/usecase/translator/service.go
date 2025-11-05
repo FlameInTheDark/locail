@@ -34,6 +34,7 @@ type TranslateArgs struct {
     Model      string
     SystemOverride string
     UserOverride   string
+    BypassCache    bool
 }
 
 func (s *Service) TranslateOne(ctx context.Context, a TranslateArgs) (string, error) {
@@ -59,9 +60,11 @@ func (s *Service) TranslateOne(ctx context.Context, a TranslateArgs) (string, er
     seg := ports.Segment{Key: a.Unit.Key, Text: masked, Context: a.Unit.Context, Placeholders: ph, Tags: tags}
 
     // Cache lookup (masked variant to protect placeholders)
-    if ce, _ := s.d.Cache.Get(ctx, masked, a.SourceLang, a.TargetLang, prov.Type, a.Model); ce != nil {
-        out := unmask(ce.Translation)
-        return out, nil
+    if !a.BypassCache {
+        if ce, _ := s.d.Cache.Get(ctx, masked, a.SourceLang, a.TargetLang, prov.Type, a.Model); ce != nil {
+            out := unmask(ce.Translation)
+            return out, nil
+        }
     }
 
     // Build provider and execute translation

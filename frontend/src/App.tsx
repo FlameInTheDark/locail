@@ -15,7 +15,8 @@ import ExportModal from './components/ExportModal'
 import UpdateFileModal from './components/UpdateFileModal'
 import ProviderEditor from './components/ProviderEditor'
 import ConfirmModal from './components/ConfirmModal'
-import { Pencil, Trash2, RefreshCw, UploadCloud, Plus, FileDiff } from 'lucide-react'
+import { Pencil, Trash2, RefreshCw, UploadCloud, Plus, FileDiff, Download, CircleX } from 'lucide-react'
+import { Progress } from './components/ui/progress'
 import ProviderDropdown from './components/ProviderDropdown'
 
 type ProjectRecord = {
@@ -186,6 +187,18 @@ function App() {
   const [jobProgress, setJobProgress] = useState<JobProgress>({ jobId: null, done: 0, total: 0, status: 'idle' })
   const [currentItem, setCurrentItem] = useState<JobItemState>({})
   const [lastResult, setLastResult] = useState<JobLastResult>({})
+  const handleCancelJob = useCallback(async () => {
+    if (!(window as any)?.go?.app) { setStatus('Backend not available in web mode.'); return }
+    const id = jobProgress.jobId
+    if (!id) return
+    try {
+      await (JobsAPI as any).Cancel(id)
+      setStatus(`Cancel requested for job #${id}.`)
+    } catch (e) {
+      console.error(e)
+      setStatus('Failed to cancel job.')
+    }
+  }, [jobProgress.jobId])
 
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -552,7 +565,8 @@ function App() {
       setStatus('Select a target language first.')
       return
     }
-    const unitIds = entries.filter(entry => selection.has(entry.unitId)).map(entry => entry.unitId)
+    const selectedEntries = entries.filter(entry => selection.has(entry.unitId))
+    const unitIds = selectedEntries.map(entry => entry.unitId)
     if (unitIds.length === 0) {
       setStatus('Select at least one row to translate.')
       return
@@ -564,11 +578,12 @@ function App() {
         unit_ids: unitIds,
         locales,
         model: providerSettings.model,
+        force: true,
       })
       const jobId = res?.job_id ?? res?.JobID
       if (jobId) {
         setJobProgress({ jobId, done: 0, total: unitIds.length * locales.length, status: 'running', model: providerSettings.model })
-        setStatus(`Queued translation for ${unitIds.length} item${unitIds.length === 1 ? '' : 's'}.`)
+        setStatus(`Queued re-translate for ${unitIds.length} item${unitIds.length === 1 ? '' : 's'} (force).`)
       } else {
         setStatus('No jobs started.')
       }
@@ -604,6 +619,7 @@ function App() {
         unit_id: entry.unitId,
         locales,
         model: providerSettings.model,
+        force: true,
       })
       const jobId = res?.job_id ?? res?.JobID
       if (jobId) {
@@ -754,13 +770,23 @@ function App() {
     setSelection(new Set())
   }, [])
 
-  const handleNewProject = useCallback(async ({ name, source }: { name: string; source: string }) => {
+  const handleNewProject = useCallback(async ({ name, source, locales }: { name: string; source: string; locales: string[] }) => {
     if (!(window as any)?.go?.app) {
       setStatus('Backend not available in web mode.')
       return
     }
     try {
-      await (ProjectAPI as any).Create(name, source || 'en')
+      const created = await (ProjectAPI as any).Create(name, source || 'en')
+      const projectId = created?.id || created?.ID || null
+      // Add target locales if provided
+      if (projectId && Array.isArray(locales)) {
+        const norm = (s: string) => (s || '').trim()
+        const src = norm(source || 'en')
+        const unique = Array.from(new Set(locales.map(norm).filter(l => l && l !== src)))
+        for (const loc of unique) {
+          try { await (ProjectAPI as any).AddLocale(projectId, loc) } catch (e) { console.error('AddLocale failed', loc, e) }
+        }
+      }
       setStatus('Project created.')
       await loadProjects()
       setNewProjectOpen(false)
@@ -1149,7 +1175,7 @@ function App() {
 
         <main className="flex-1 flex flex-col min-w-0">
           {activeTab !== 'settings' && (
-          <header className="bg-white border-b border-slate-200 p-3">
+          <header className={`bg-white border-b border-slate-200 p-3 ${sidebarCollapsed ? 'pl-12' : ''}`}>
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2">
                 <label className="text-xs text-slate-600">Source</label>
@@ -1243,8 +1269,10 @@ function App() {
                   className="px-3 py-2 rounded-xl border border-slate-200 text-sm"
                   onClick={() => setExportOpen(true)}
                   disabled={!selectedFileId}
+                  title="Export"
+                  aria-label="Export"
                 >
-                  Export…
+                  <Download className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -1360,14 +1388,27 @@ function App() {
 
           <footer className="border-t border-slate-200 bg-white p-2 text-xs text-slate-600 flex items-center justify-between">
             <div id="footerStatus">{status}</div>
-            <div className="flex items-center gap-2">
-              <button
-                id="exportMemory"
-                className="px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-50"
-                onClick={handleExportMemory}
-              >
-                Export TMX/JSON
-              </button>
+            <div className="flex items-center gap-3 min-w-[220px] justify-end">
+              {jobProgress.total > 0 && (
+                <>
+                  <div className="text-[11px] text-slate-500 whitespace-nowrap">
+                    {jobProgress.done}/{jobProgress.total} · {jobProgress.status}
+                  </div>
+                  <div className="w-48">
+                    <Progress value={jobProgress.done} max={jobProgress.total || 100} />
+                  </div>
+                </>
+              )}
+              {jobProgress.jobId && jobProgress.status && jobProgress.status !== 'done' && (
+                <button
+                  className="p-1 rounded-lg border border-slate-200 hover:bg-slate-50"
+                  onClick={handleCancelJob}
+                  title="Stop job"
+                  aria-label="Stop job"
+                >
+                  <CircleX className="h-4 w-4 text-red-600" />
+                </button>
+              )}
             </div>
           </footer>
         </main>

@@ -9,3 +9,7 @@ export function Greet(arg1) {
 export function SetRunner(arg1) {
   return window['go']['main']['App']['SetRunner'](arg1);
 }
+
+export function Version() {
+  return window['go']['main']['App']['Version']();
+}

@@ -34,11 +34,13 @@ type StartTranslateUnitRequest struct {
     UnitID     int64    `json:"unit_id"`
     Locales    []string `json:"locales"`
     Model      string   `json:"model"`
+    Force      bool     `json:"force"`
 }
 
 func (a *JobsAPI) StartTranslateUnit(req StartTranslateUnitRequest) (StartJobResponse, error) {
     ctx := context.Background()
-    jid, err := a.r.StartTranslateUnit(ctx, req.ProjectID, req.ProviderID, jobs.TranslateUnitParams{UnitID: req.UnitID, Locales: req.Locales, Model: req.Model})
+    // Always force re-translation from backend to ensure fresh output when requested from UI
+    jid, err := a.r.StartTranslateUnit(ctx, req.ProjectID, req.ProviderID, jobs.TranslateUnitParams{UnitID: req.UnitID, Locales: req.Locales, Model: req.Model, Force: true})
     if err != nil { return StartJobResponse{}, err }
     return StartJobResponse{JobID: jid}, nil
 }
@@ -49,11 +51,13 @@ type StartTranslateUnitsRequest struct {
     UnitIDs    []int64   `json:"unit_ids"`
     Locales    []string  `json:"locales"`
     Model      string    `json:"model"`
+    Force      bool      `json:"force"`
 }
 
 func (a *JobsAPI) StartTranslateUnits(req StartTranslateUnitsRequest) (StartJobResponse, error) {
     ctx := context.Background()
-    jid, err := a.r.StartTranslateUnits(ctx, req.ProjectID, req.ProviderID, jobs.TranslateUnitsParams{UnitIDs: req.UnitIDs, Locales: req.Locales, Model: req.Model})
+    // Always force re-translation from backend to ensure fresh output when requested from UI
+    jid, err := a.r.StartTranslateUnits(ctx, req.ProjectID, req.ProviderID, jobs.TranslateUnitsParams{UnitIDs: req.UnitIDs, Locales: req.Locales, Model: req.Model, Force: true})
     if err != nil { return StartJobResponse{}, err }
     return StartJobResponse{JobID: jid}, nil
 }

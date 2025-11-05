@@ -7,18 +7,20 @@ import { Label } from './ui/label'
 type Props = {
   open: boolean
   onClose: () => void
-  onSubmit: (data: { name: string; source: string }) => Promise<void> | void
+  onSubmit: (data: { name: string; source: string; locales: string[] }) => Promise<void> | void
 }
 
 export default function NewProjectModal({ open, onClose, onSubmit }: Props) {
   const [name, setName] = useState('')
   const [source, setSource] = useState('en')
+  const [localesText, setLocalesText] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (open) {
       setName('')
       setSource('en')
+      setLocalesText('')
       setSubmitting(false)
     }
   }, [open])
@@ -28,7 +30,13 @@ export default function NewProjectModal({ open, onClose, onSubmit }: Props) {
   const create = async () => {
     if (!name.trim()) return
     setSubmitting(true)
-    try { await onSubmit({ name: name.trim(), source: source.trim() || 'en' }) }
+    try {
+      const locales = localesText
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+      await onSubmit({ name: name.trim(), source: source.trim() || 'en', locales })
+    }
     finally { setSubmitting(false) }
   }
 
@@ -52,6 +60,11 @@ export default function NewProjectModal({ open, onClose, onSubmit }: Props) {
             <Input id="srcLang" value={source} onChange={e => setSource(e.target.value)} placeholder="en" />
             <div className="text-xs text-slate-500">Example: en, de, fr. Defaults to "en".</div>
           </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="targetLocales" className="text-sm">Target Locales (optional)</Label>
+            <Input id="targetLocales" value={localesText} onChange={e => setLocalesText(e.target.value)} placeholder="de, fr, es" />
+            <div className="text-xs text-slate-500">Comma-separated list. The source language will be added automatically.</div>
+          </div>
         </div>
         <div className="p-3 border-t border-slate-200 flex items-center justify-end gap-2">
           <Button variant="outline" onClick={onClose} disabled={submitting}>Cancel</Button>
@@ -61,4 +74,3 @@ export default function NewProjectModal({ open, onClose, onSubmit }: Props) {
     </div>
   )
 }
-

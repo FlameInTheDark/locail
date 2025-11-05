@@ -244,6 +244,7 @@ export namespace app {
 	    unit_id: number;
 	    locales: string[];
 	    model: string;
+	    force: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new StartTranslateUnitRequest(source);
@@ -256,6 +257,7 @@ export namespace app {
 	        this.unit_id = source["unit_id"];
 	        this.locales = source["locales"];
 	        this.model = source["model"];
+	        this.force = source["force"];
 	    }
 	}
 	export class StartTranslateUnitsRequest {
@@ -264,6 +266,7 @@ export namespace app {
 	    unit_ids: number[];
 	    locales: string[];
 	    model: string;
+	    force: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new StartTranslateUnitsRequest(source);
@@ -276,6 +279,7 @@ export namespace app {
 	        this.unit_ids = source["unit_ids"];
 	        this.locales = source["locales"];
 	        this.model = source["model"];
+	        this.force = source["force"];
 	    }
 	}
 	

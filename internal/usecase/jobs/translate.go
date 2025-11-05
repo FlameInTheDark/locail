@@ -51,6 +51,7 @@ type TranslateUnitParams struct {
     UnitID       int64    `json:"unit_id"`
     Locales      []string `json:"locales"`
     Model        string   `json:"model"`
+    Force        bool     `json:"force"`
 }
 
 // TranslateUnitsParams describes a batch of specific units to translate sequentially.
@@ -58,6 +59,7 @@ type TranslateUnitsParams struct {
     UnitIDs      []int64  `json:"unit_ids"`
     Locales      []string `json:"locales"`
     Model        string   `json:"model"`
+    Force        bool     `json:"force"`
 }
 
 func (r *Runner) StartTranslateFile(ctx context.Context, projectID, providerID int64, p TranslateFileParams) (int64, error) {
@@ -168,11 +170,15 @@ func (r *Runner) StartTranslateUnit(ctx context.Context, projectID, providerID i
         if prov, err := r.d.Providers.Get(ctx, providerID); err == nil && prov != nil { p.Model = prov.Model }
     }
     if norm, err := r.normalizeModel(ctx, providerID, p.Model); err == nil && norm != "" { p.Model = norm }
-    // Compute missing locales for this unit
+    // Compute locales to process: all if Force, else only missing
     miss := make([]string, 0, len(p.Locales))
-    for _, tgt := range p.Locales {
-        if t, _ := r.d.Translations.Get(ctx, p.UnitID, tgt); t == nil || strings.TrimSpace(t.Text) == "" {
-            miss = append(miss, tgt)
+    if p.Force {
+        miss = append(miss, p.Locales...)
+    } else {
+        for _, tgt := range p.Locales {
+            if t, _ := r.d.Translations.Get(ctx, p.UnitID, tgt); t == nil || strings.TrimSpace(t.Text) == "" {
+                miss = append(miss, tgt)
+            }
         }
     }
     paramsJSON, _ := json.Marshal(p)
@@ -201,7 +207,7 @@ func (r *Runner) runTranslateUnit(ctx context.Context, jobID, providerID int64, 
         if r.em != nil { r.em.Emit("job.item.start", map[string]any{"job_id": jobID, "unit_id": u.ID, "key": u.Key, "locale": tgt, "model": p.Model}) }
         r.log(ctx, jobID, "info", fmt.Sprintf("translate start: key=%s locale=%s model=%s", u.Key, tgt, p.Model))
         ictx, cancel := context.WithTimeout(ctx, 60*time.Second)
-        txt, err := r.trans.TranslateOne(ictx, translator.TranslateArgs{ProviderID: providerID, Unit: u, SourceLang: "", TargetLang: tgt, Model: p.Model})
+        txt, err := r.trans.TranslateOne(ictx, translator.TranslateArgs{ProviderID: providerID, Unit: u, SourceLang: "", TargetLang: tgt, Model: p.Model, BypassCache: p.Force})
         cancel()
         if err != nil {
             _ = r.d.Jobs.UpdateItem(ctx, itemID, "failed", err.Error())
@@ -229,12 +235,16 @@ func (r *Runner) StartTranslateUnits(ctx context.Context, projectID, providerID 
         if prov, err := r.d.Providers.Get(ctx, providerID); err == nil && prov != nil { p.Model = prov.Model }
     }
     if norm, err := r.normalizeModel(ctx, providerID, p.Model); err == nil && norm != "" { p.Model = norm }
-    // Compute total missing items
+    // Compute total items: all if Force, else only missing
     total := 0
-    for _, uid := range p.UnitIDs {
-        for _, tgt := range p.Locales {
-            if t, _ := r.d.Translations.Get(ctx, uid, tgt); t == nil || strings.TrimSpace(t.Text) == "" {
-                total++
+    if p.Force {
+        total = len(p.UnitIDs) * len(p.Locales)
+    } else {
+        for _, uid := range p.UnitIDs {
+            for _, tgt := range p.Locales {
+                if t, _ := r.d.Translations.Get(ctx, uid, tgt); t == nil || strings.TrimSpace(t.Text) == "" {
+                    total++
+                }
             }
         }
     }
@@ -261,15 +271,17 @@ func (r *Runner) runTranslateUnits(ctx context.Context, jobID, providerID int64,
         u, err := r.d.Units.Get(ctx, uid)
         if err != nil || u == nil { continue }
         for _, tgt := range p.Locales {
-            // Skip existing
-            if t, _ := r.d.Translations.Get(ctx, u.ID, tgt); t != nil && strings.TrimSpace(t.Text) != "" {
-                continue
+            // Skip existing unless forced
+            if !p.Force {
+                if t, _ := r.d.Translations.Get(ctx, u.ID, tgt); t != nil && strings.TrimSpace(t.Text) != "" {
+                    continue
+                }
             }
             item := &domain.JobItem{JobID: jobID, UnitID: &u.ID, Locale: &tgt, Status: "running"}
             itemID, _ := r.d.Jobs.AddItem(ctx, item)
             if r.em != nil { r.em.Emit("job.item.start", map[string]any{"job_id": jobID, "unit_id": u.ID, "key": u.Key, "locale": tgt, "model": p.Model}) }
             ictx, cancel := context.WithTimeout(ctx, 60*time.Second)
-            txt, err := r.trans.TranslateOne(ictx, translator.TranslateArgs{ProviderID: providerID, Unit: u, SourceLang: "", TargetLang: tgt, Model: p.Model})
+            txt, err := r.trans.TranslateOne(ictx, translator.TranslateArgs{ProviderID: providerID, Unit: u, SourceLang: "", TargetLang: tgt, Model: p.Model, BypassCache: p.Force})
             cancel()
             if err != nil {
                 _ = r.d.Jobs.UpdateItem(ctx, itemID, "failed", err.Error())

@@ -5,3 +5,5 @@ import {jobs} from '../models';
 export function Greet(arg1:string):Promise<string>;
 
 export function SetRunner(arg1:jobs.Runner):Promise<void>;
+
+export function Version():Promise<string>;
