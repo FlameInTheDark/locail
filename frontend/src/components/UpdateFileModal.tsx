@@ -44,6 +44,7 @@ export default function UpdateFileModal({ open, fileId, filePath, originalFormat
   const [format, setFormat] = useState<string>(originalFormat || '')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [dragActive, setDragActive] = useState(false)
 
   const [existing, setExisting] = useState<Record<string, string>>({})
   const [imported, setImported] = useState<ImportedItem[]>([])
@@ -110,6 +111,26 @@ export default function UpdateFileModal({ open, fileId, filePath, originalFormat
     }
   }
 
+  const onDropAreaDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!dragActive) setDragActive(true)
+  }
+
+  const onDropAreaDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (dragActive) setDragActive(false)
+  }
+
+  const onDropAreaDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragActive(false)
+    const f = e.dataTransfer?.files?.[0] || null
+    if (f) onSelectFile(f)
+  }
+
   const totalImported = imported.length
   const totalNew = newKeys.length
   const totalConf = conflicts.length
@@ -140,12 +161,12 @@ export default function UpdateFileModal({ open, fileId, filePath, originalFormat
   return (
     <div className="fixed inset-0 z-50 grid place-items-center">
       <div className="absolute inset-0 bg-black/40" onClick={() => !busy && onClose()} />
-      <div className="relative z-10 w-[92vw] max-w-3xl rounded-xl bg-white shadow-xl border border-slate-200">
+      <div className="relative z-10 w-[92vw] max-w-3xl rounded-xl bg-white shadow-xl border border-slate-200 flex flex-col max-h-[85vh]">
         <div className="flex items-center justify-between p-3 border-b border-slate-200">
           <div className="text-sm font-semibold">Update File</div>
           <button className="p-2 rounded-lg hover:bg-slate-100" onClick={() => !busy && onClose()} aria-label="Close"><X className="h-4 w-4"/></button>
         </div>
-        <div className="p-4 grid gap-3">
+        <div className="p-4 grid gap-3 overflow-y-auto min-h-0">
           {error && <div className="text-sm text-red-600">{error}</div>}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
@@ -159,7 +180,13 @@ export default function UpdateFileModal({ open, fileId, filePath, originalFormat
             </div>
             <div>
               <label className="text-sm">Select updated file</label>
-              <div className="border rounded-md p-3 text-center bg-muted/20">
+              <div
+                className={`border rounded-md p-3 text-center bg-muted/20 ${dragActive ? 'ring-2 ring-indigo-500 border-indigo-500' : ''}`}
+                onDragOver={onDropAreaDragOver}
+                onDragLeave={onDropAreaDragLeave}
+                onDrop={onDropAreaDrop}
+                aria-label="Drop file here"
+              >
                 <div className="flex flex-col items-center justify-center gap-2">
                   <UploadCloud className="h-6 w-6 text-muted-foreground"/>
                   <div className="text-sm text-muted-foreground">Drag & drop or choose a file</div>
@@ -188,7 +215,7 @@ export default function UpdateFileModal({ open, fileId, filePath, originalFormat
                 </div>
               )}
               {totalConf > 0 && (
-                <div className="border rounded-md">
+                <div className="border rounded-md max-h-[50vh] overflow-auto">
                   <div className="px-3 py-2 text-sm font-medium bg-slate-50 border-b">Conflicts</div>
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 border-b">
@@ -206,13 +233,21 @@ export default function UpdateFileModal({ open, fileId, filePath, originalFormat
                           <td className="px-3 py-1 align-top text-slate-600">{c.dbSource}</td>
                           <td className="px-3 py-1 align-top text-slate-800">{c.newSource}</td>
                           <td className="px-3 py-1 align-top">
-                            <div className="flex items-center gap-3">
-                              <label className="inline-flex items-center gap-1 text-xs">
-                                <input type="radio" name={`keep-${idx}`} checked={c.choice === 'db'} onChange={() => setConflicts(prev => prev.map((x,i) => i===idx? { ...x, choice: 'db' }: x))} /> DB
-                              </label>
-                              <label className="inline-flex items-center gap-1 text-xs">
-                                <input type="radio" name={`keep-${idx}`} checked={c.choice === 'new'} onChange={() => setConflicts(prev => prev.map((x,i) => i===idx? { ...x, choice: 'new' }: x))} /> Imported
-                              </label>
+                            <div className="inline-flex items-center rounded-md border overflow-hidden" role="group" aria-label={`Choose version for ${c.key}`}>
+                              <button
+                                type="button"
+                                className={`px-2 py-1 text-xs ${c.choice === 'db' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                                onClick={() => setConflicts(prev => prev.map((x,i) => i===idx? { ...x, choice: 'db' }: x))}
+                              >
+                                Old
+                              </button>
+                              <button
+                                type="button"
+                                className={`px-2 py-1 text-xs border-l ${c.choice === 'new' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                                onClick={() => setConflicts(prev => prev.map((x,i) => i===idx? { ...x, choice: 'new' }: x))}
+                              >
+                                New
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -232,4 +267,3 @@ export default function UpdateFileModal({ open, fileId, filePath, originalFormat
     </div>
   )
 }
-

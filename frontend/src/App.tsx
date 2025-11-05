@@ -572,6 +572,11 @@ function App() {
       return
     }
     try {
+      // If user intentionally cleared drafts, clear stored translations first
+      const toClear = entries.filter(e => selection.has(e.unitId) && (e.draft || '').trim() === '')
+      for (const e of toClear) {
+        try { await (TranslationsAPI as any).Upsert({ unit_id: e.unitId, locale: targetLang, text: '', status: 'draft' }) } catch {}
+      }
       const res = await (JobsAPI as any).StartTranslateUnits({
         project_id: selectedProjectId,
         provider_id: providerSettings.providerId,
@@ -612,6 +617,9 @@ function App() {
       return
     }
     try {
+      if ((entry.draft || '').trim() === '') {
+        try { await (TranslationsAPI as any).Upsert({ unit_id: entry.unitId, locale: targetLang, text: '', status: 'draft' }) } catch {}
+      }
       setStatus(`Starting translation for ${entry.key}…`)
       const res = await (JobsAPI as any).StartTranslateUnit({
         project_id: selectedProjectId,
