@@ -176,7 +176,7 @@ function App() {
   const [exportOpen, setExportOpen] = useState(false)
   const [updateOpen, setUpdateOpen] = useState(false)
   const [selection, setSelection] = useState<Set<number>>(new Set())
-  const [settingsProviderId, setSettingsProviderId] = useState<number | 'new' | null>(null)
+  const [settingsProviderId, setSettingsProviderId] = useState<number | 'new' | 'general' | null>(null)
   const [confirmState, setConfirmState] = useState<{ open: boolean; title: string; message: string; confirmText?: string; onConfirm?: () => Promise<void> | void }>({ open: false, title: '', message: '' })
   const [providerSettings, setProviderSettings] = useState<ProviderSettings>({
     providerId: null,
@@ -340,7 +340,7 @@ function App() {
       setProviders(list)
       if (list.length === 0) {
         setProviderSettings({ providerId: null, providerType: '', baseUrl: '', model: '', apiKeyMasked: '' })
-        setSettingsProviderId('new')
+        setSettingsProviderId('general')
       } else {
         setProviderSettings(prev => {
           const existing = prev.providerId ? list.find(p => p.id === prev.providerId) : undefined
@@ -354,8 +354,9 @@ function App() {
           }
         })
         setSettingsProviderId(prev => {
-          if (prev === 'new' || prev == null) return list[0]?.id ?? 'new'
-          return list.some(p => p.id === prev) ? prev : (list[0]?.id ?? 'new')
+          if (prev === 'new' || prev == null) return list[0]?.id ?? 'general'
+          if (prev === 'general') return 'general'
+          return list.some(p => p.id === prev) ? prev : (list[0]?.id ?? 'general')
         })
       }
     } catch (error) {
