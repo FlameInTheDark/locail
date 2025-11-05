@@ -18,6 +18,7 @@ import ConfirmModal from './components/ConfirmModal'
 import { Pencil, Trash2, RefreshCw, UploadCloud, Plus, FileDiff, Download, CircleX } from 'lucide-react'
 import { Progress } from './components/ui/progress'
 import ProviderDropdown from './components/ProviderDropdown'
+import GeneralSettings from './components/GeneralSettings'
 
 type ProjectRecord = {
   id: number
@@ -187,6 +188,13 @@ function App() {
   const [jobProgress, setJobProgress] = useState<JobProgress>({ jobId: null, done: 0, total: 0, status: 'idle' })
   const [currentItem, setCurrentItem] = useState<JobItemState>({})
   const [lastResult, setLastResult] = useState<JobLastResult>({})
+  const [colWidths, setColWidths] = useState<{ key: number; source: number; saved: number; translation: number; actions: number }>({ key: 320, source: 420, saved: 360, translation: 520, actions: 220 })
+  const [resizing, setResizing] = useState<{ col: 'key' | 'source' | 'saved' | 'translation' | 'actions' | null; startX: number; startWidth: number }>({ col: null, startX: 0, startWidth: 0 })
+  const [settingsTab, setSettingsTab] = useState<'general' | 'providers'>('general')
+  const [themePref, setThemePref] = useState<'system' | 'light' | 'dark'>(() => {
+    const v = localStorage.getItem('theme') as any
+    return v === 'light' || v === 'dark' || v === 'system' ? v : 'system'
+  })
   const handleCancelJob = useCallback(async () => {
     if (!(window as any)?.go?.app) { setStatus('Backend not available in web mode.'); return }
     const id = jobProgress.jobId
@@ -353,6 +361,72 @@ function App() {
     } catch (error) {
       console.error(error)
     }
+  }, [])
+
+  useEffect(() => {
+    if (!resizing.col) return
+    const onMove = (e: MouseEvent) => {
+      const dx = e.clientX - resizing.startX
+      const min = 240
+      const max = 1200
+      if (resizing.col === 'key') {
+        const w = Math.max(min, Math.min(max, resizing.startWidth + dx))
+        setColWidths(prev => ({ ...prev, key: w }))
+      } else if (resizing.col === 'source') {
+        const w = Math.max(min, Math.min(max, resizing.startWidth + dx))
+        setColWidths(prev => ({ ...prev, source: w }))
+      } else if (resizing.col === 'saved') {
+        const w = Math.max(min, Math.min(max, resizing.startWidth + dx))
+        setColWidths(prev => ({ ...prev, saved: w }))
+      } else if (resizing.col === 'translation') {
+        const w = Math.max(min, Math.min(max, resizing.startWidth + dx))
+        setColWidths(prev => ({ ...prev, translation: w }))
+      } else if (resizing.col === 'actions') {
+        const w = Math.max(160, Math.min(max, resizing.startWidth + dx))
+        setColWidths(prev => ({ ...prev, actions: w }))
+      }
+    }
+    const onUp = () => setResizing({ col: null, startX: 0, startWidth: 0 })
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+  }, [resizing])
+
+  const beginResize = useCallback((col: 'key' | 'source' | 'saved' | 'translation' | 'actions', e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation()
+    let startWidth = 0
+    if (col === 'key') startWidth = colWidths.key
+    else if (col === 'source') startWidth = colWidths.source
+    else if (col === 'saved') startWidth = colWidths.saved
+    else if (col === 'translation') startWidth = colWidths.translation
+    else if (col === 'actions') startWidth = colWidths.actions
+    setResizing({ col, startX: e.clientX, startWidth })
+  }, [colWidths])
+
+  useEffect(() => {
+    const root = document.documentElement
+    const apply = (pref: 'system' | 'light' | 'dark') => {
+      if (pref === 'system') {
+        const m = window.matchMedia('(prefers-color-scheme: dark)')
+        if (m.matches) root.classList.add('dark')
+        else root.classList.remove('dark')
+      } else if (pref === 'dark') {
+        root.classList.add('dark')
+      } else {
+        root.classList.remove('dark')
+      }
+    }
+    apply(themePref)
+    localStorage.setItem('theme', themePref)
+    let mql: MediaQueryList | null = null
+    const onChange = (e: MediaQueryListEvent) => { if (themePref === 'system') { if (e.matches) root.classList.add('dark'); else root.classList.remove('dark') } }
+    if (themePref === 'system') { mql = window.matchMedia('(prefers-color-scheme: dark)'); try { mql.addEventListener('change', onChange) } catch { mql?.addListener(onChange) } }
+    return () => { if (mql) { try { mql.removeEventListener('change', onChange) } catch { mql.removeListener(onChange) } } }
+  }, [themePref])
+
+  const handleChangeTheme = useCallback((value: 'system'|'light'|'dark') => {
+    setThemePref(value)
+    setStatus(`Theme set to ${value}.`)
   }, [])
 
   useEffect(() => {
@@ -855,7 +929,7 @@ function App() {
   }, [selectedFileId, targetLang, selectedFile])
 
   const statusSection = (
-    <div className="border-t border-slate-200 p-3 text-xs text-slate-600 flex items-center justify-between gap-3 flex-wrap">
+    <div className="border-t border-slate-200 dark:border-slate-700 p-3 text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between gap-3 flex-wrap dark:bg-slate-800">
       <div className="min-w-[40%]">
         Status: <span id="status">{status}</span>
         {jobProgress.jobId && (
@@ -886,7 +960,7 @@ function App() {
   )
 
   return (
-    <div className="h-screen w-screen antialiased text-slate-900 bg-slate-50 overflow-x-hidden">
+    <div className="h-screen w-screen antialiased text-slate-900 bg-slate-50 dark:text-slate-100 dark:bg-slate-900 overflow-x-hidden">
       <NewProjectModal
         open={newProjectOpen}
         onClose={() => setNewProjectOpen(false)}
@@ -943,7 +1017,7 @@ function App() {
       <div id="app" className="h-full w-full flex">
         {sidebarCollapsed && (
           <button
-            className="fixed top-2 left-2 z-50 p-2 rounded-xl border border-slate-200 bg-white shadow hover:bg-slate-50"
+            className="fixed top-2 left-2 z-50 p-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow hover:bg-slate-50 dark:hover:bg-slate-700"
             title="Expand sidebar"
             aria-label="Expand sidebar"
             onClick={() => setSidebarCollapsed(false)}
@@ -954,16 +1028,16 @@ function App() {
           </button>
         )}
         <aside
-          className={`w-80 max-w-xs bg-white border-r border-slate-200 flex flex-col ${sidebarCollapsed ? 'hidden' : ''}`}
+          className={`w-80 max-w-xs bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col ${sidebarCollapsed ? 'hidden' : ''}`}
         >
-          <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+          <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="h-8 w-8 rounded-xl bg-indigo-600 text-white grid place-items-center font-bold">LT</div>
               <h1 className="text-sm font-semibold">LLM Translator</h1>
             </div>
             <button
               id="collapseSidebar"
-              className="p-2 rounded-xl hover:bg-slate-100"
+              className="p-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white/90 dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600"
               title="Collapse sidebar"
               aria-label="Collapse sidebar"
               onClick={() => setSidebarCollapsed(prev => !prev)}
@@ -1003,10 +1077,10 @@ function App() {
           <div className="p-3 grow overflow-auto">
             <section id="tab-projects" className={`tab-pane ${activeTab === 'projects' ? '' : 'hidden'}`}>
               <div className="flex items-center justify-between">
-                <label className="block text-xs font-medium text-slate-600">Projects</label>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">Projects</label>
                 <button
                   id="newProjectBtn"
-                  className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50"
+                  className="p-2 rounded-xl border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-slate-200"
                   title="Create project"
                   aria-label="Create project"
                   onClick={() => setNewProjectOpen(true)}
@@ -1018,7 +1092,7 @@ function App() {
                 {projects.map(p => (
                   <li key={p.id} className="relative group">
                     <button
-                      className={`w-full text-left px-2 py-1 rounded-lg hover:bg-slate-100 pr-14 ${selectedProjectId === p.id ? 'bg-slate-100' : ''}`}
+                      className={`w-full text-left px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 pr-14 ${selectedProjectId === p.id ? 'bg-slate-100 dark:bg-slate-700' : ''}`}
                       onClick={() => handleSelectProject(String(p.id))}
                       title="Open project"
                     >
@@ -1026,7 +1100,7 @@ function App() {
                     </button>
                     <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        className="h-6 w-6 rounded-md bg-white/90 hover:bg-slate-100 flex items-center justify-center shadow-sm"
+                        className="h-6 w-6 rounded-md bg-white/90 dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-600 flex items-center justify-center shadow-sm"
                         title="Edit project"
                         aria-label="Edit project"
                         onClick={(e) => { e.stopPropagation(); setEditProject(p) }}
@@ -1034,7 +1108,7 @@ function App() {
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <button
-                        className="h-6 w-6 rounded-md bg-white/90 hover:bg-red-50 text-red-700 flex items-center justify-center shadow-sm"
+                        className="h-6 w-6 rounded-md bg-white/90 dark:bg-slate-700 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-700 dark:text-red-400 flex items-center justify-center shadow-sm"
                         title="Delete project"
                         aria-label="Delete project"
                         onClick={(e) => {
@@ -1067,7 +1141,7 @@ function App() {
               <div className="flex items-center gap-2">
                 <button
                   id="refreshFiles"
-                  className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50"
+                  className="p-2 rounded-xl border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
                   title="Refresh files"
                   aria-label="Refresh files"
                   onClick={() => { if (selectedProjectId != null) loadFiles(selectedProjectId) }}
@@ -1075,7 +1149,7 @@ function App() {
                   <RefreshCw className="h-4 w-4" />
                 </button>
                 <button
-                  className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50"
+                  className="p-2 rounded-xl border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
                   title="Update file from new version"
                   aria-label="Update file"
                   onClick={() => setUpdateOpen(true)}
@@ -1084,7 +1158,7 @@ function App() {
                   <FileDiff className="h-4 w-4" />
                 </button>
                 <button
-                  className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50"
+                  className="p-2 rounded-xl border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
                   title="Import file"
                   aria-label="Import file"
                   onClick={() => setImportOpen(true)}
@@ -1093,7 +1167,7 @@ function App() {
                 </button>
               </div>
               <div className="mt-3">
-                <label className="block text-xs font-medium text-slate-600 mb-1">Files</label>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1">Files</label>
                 <ul id="fileTree" className="text-sm space-y-1">
                   {files.map(file => {
                     const stats = fileStats[file.id]
@@ -1103,7 +1177,7 @@ function App() {
                     return (
                       <li key={file.id} className="relative group">
                         <button
-                          className={`w-full text-left px-2 py-1 rounded-lg hover:bg-slate-100 pr-12 ${current ? 'bg-slate-100' : ''}`}
+                          className={`w-full text-left px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 pr-12 ${current ? 'bg-slate-100 dark:bg-slate-700' : ''}`}
                           data-file={file.path}
                           onClick={() => handleSelectFile(String(file.id))}
                           title="Open file"
@@ -1115,7 +1189,7 @@ function App() {
                         </button>
                         <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
-                            className="h-6 w-6 rounded-md bg-white/90 hover:bg-red-50 text-red-700 flex items-center justify-center shadow-sm"
+                            className="h-6 w-6 rounded-md bg-white/90 dark:bg-slate-700 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-700 dark:text-red-400 flex items-center justify-center shadow-sm"
                             title="Delete file"
                             aria-label="Delete file"
                             onClick={(e) => {
@@ -1150,26 +1224,36 @@ function App() {
 
             <section id="tab-settings" className={`tab-pane ${activeTab === 'settings' ? '' : 'hidden'}`}>
               <div className="grid gap-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-medium text-slate-600">Providers</label>
-                  <button
-                    className="px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs"
-                    onClick={() => setSettingsProviderId('new')}
-                    title="Add provider"
-                  >
-                    + Add
-                  </button>
-                </div>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-300">Settings</label>
                 <ul className="space-y-1 text-sm">
+                  <li>
+                    <button
+                      className={`w-full text-left px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 ${settingsProviderId === 'general' ? 'bg-slate-100 dark:bg-slate-700' : ''}`}
+                      onClick={() => setSettingsProviderId('general')}
+                      title="General settings"
+                    >
+                      General
+                    </button>
+                  </li>
+                  <li className="mt-1 flex items-center justify-between">
+                    <span className="block text-xs font-medium text-slate-600 dark:text-slate-300">Providers</span>
+                    <button
+                      className="px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs"
+                      onClick={() => setSettingsProviderId('new')}
+                      title="Add provider"
+                    >
+                      + Add
+                    </button>
+                  </li>
                   {providers.map(p => (
                     <li key={p.id}>
                       <button
-                        className={`w-full text-left px-2 py-1 rounded-lg hover:bg-slate-100 ${settingsProviderId === p.id ? 'bg-slate-100' : ''}`}
+                        className={`w-full text-left px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 ${settingsProviderId === p.id ? 'bg-slate-100 dark:bg-slate-700' : ''}`}
                         onClick={() => { setSettingsProviderId(p.id); selectProvider(String(p.id)) }}
                         title={`${p.name} (${p.type})`}
                       >
                         {p.name}
-                        <span className="ml-2 text-xs text-slate-500">{p.type}</span>
+                        <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">{p.type}</span>
                       </button>
                     </li>
                   ))}
@@ -1183,19 +1267,19 @@ function App() {
 
         <main className="flex-1 flex flex-col min-w-0">
           {activeTab !== 'settings' && (
-          <header className={`bg-white border-b border-slate-200 p-3 ${sidebarCollapsed ? 'pl-12' : ''}`}>
+          <header className={`bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-3 ${sidebarCollapsed ? 'pl-12' : ''}`}>
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2">
-                <label className="text-xs text-slate-600">Source</label>
-                <select id="srcLang" className="rounded-xl border-slate-300 text-sm" value={srcLang} onChange={() => {}}>
+                <label className="text-xs text-slate-600 dark:text-slate-300">Source</label>
+                <select id="srcLang" className="rounded-xl border-slate-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 text-sm" value={srcLang} onChange={() => {}}>
                   <option value={srcLang}>{srcLang}</option>
                 </select>
               </div>
               <div className="flex items-center gap-2">
-                <label className="text-xs text-slate-600">Target</label>
+                <label className="text-xs text-slate-600 dark:text-slate-300">Target</label>
                 <select
                   id="tgtLang"
-                  className="rounded-xl border-slate-300 text-sm"
+                  className="rounded-xl border-slate-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 text-sm"
                   value={targetLang}
                   onChange={event => {
                     setTargetLang(event.target.value)
@@ -1218,12 +1302,12 @@ function App() {
                     id="search"
                     ref={searchInputRef}
                     placeholder="Search keys or text  ( / )"
-                    className="w-full rounded-xl border-slate-300 pl-9"
+                    className="w-full rounded-xl border-slate-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 pl-9 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     value={search}
                     onChange={event => setSearch(event.target.value)}
                   />
                   <svg
-                    className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500"
                     xmlns="http://www.w3.org/2000/svg"
                     viewBox="0 0 24 24"
                     fill="none"
@@ -1234,7 +1318,7 @@ function App() {
                     <path d="m21 21-4.3-4.3" />
                   </svg>
                 </div>
-                <label className="flex items-center gap-2 text-sm text-slate-700">
+                <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
                   <input
                     id="onlyUntranslated"
                     type="checkbox"
@@ -1249,7 +1333,7 @@ function App() {
               <div className="flex items-center gap-2">
                 <button
                   id="selectAll"
-                  className="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-sm"
+                  className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-sm"
                   title="Select all rows"
                   onClick={handleToggleAll}
                 >
@@ -1274,7 +1358,7 @@ function App() {
                   Save
                 </button>
                 <button
-                  className="px-3 py-2 rounded-xl border border-slate-200 text-sm"
+                  className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-sm"
                   onClick={() => setExportOpen(true)}
                   disabled={!selectedFileId}
                   title="Export"
@@ -1284,7 +1368,7 @@ function App() {
                 </button>
               </div>
             </div>
-            <div className="mt-2 flex items-center gap-4 text-xs text-slate-600">
+            <div className="mt-2 flex items-center gap-4 text-xs text-slate-600 dark:text-slate-300">
               <div>
                 File: <span id="currentFileLabel" className="font-medium">{selectedFile?.path || '—'}</span>
                 <span className={`ml-1 inline-block h-1.5 w-1.5 rounded-full bg-amber-400 align-middle ${dirty ? '' : 'hidden'}`} id="dirtyDot"></span>
@@ -1293,8 +1377,8 @@ function App() {
                 {formatNumber(doneEntries)}/{formatNumber(totalEntries)} translated · {formatNumber(shownEntries)} shown
               </div>
               <div className="ml-auto">
-                Shortcuts: <kbd className="px-1.5 py-0.5 rounded bg-slate-100 border">/</kbd> focus search ·{' '}
-                <kbd className="px-1.5 py-0.5 rounded bg-slate-100 border">Ctrl/Cmd+S</kbd> save
+                Shortcuts: <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 border dark:border-slate-600">/</kbd> focus search ·{' '}
+                <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 border dark:border-slate-600">Ctrl/Cmd+S</kbd> save
               </div>
             </div>
           </header>
@@ -1303,6 +1387,9 @@ function App() {
           {activeTab === 'settings' ? (
             <section className="grow overflow-auto">
               <div className="max-w-4xl mx-auto w-full px-4 py-4 grid gap-6">
+                {settingsProviderId === 'general' ? (
+                  <GeneralSettings theme={themePref} onChangeTheme={handleChangeTheme} />
+                ) : (
                 <ProviderEditor
                   provider={settingsProviderId === 'new' ? null : providers.find(p => p.id === settingsProviderId) || null}
                   onCreate={async (data) => {
@@ -1337,23 +1424,68 @@ function App() {
                       setStatus(res?.ok ? 'Provider test OK' : `Provider test failed: ${res?.error || 'unknown error'}`)
                     } catch (e: any) { console.error(e); setStatus(`Provider test failed: ${String(e?.message || e)}`) }
                   }}
-                />
+                />)}
               </div>
             </section>
           ) : (
-            <section id="tableWrap" className="grow overflow-auto">
+          <section id="tableWrap" className="grow overflow-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white border-b border-slate-200 z-10">
-                <tr className="text-left text-slate-500">
+              <thead className="sticky top-0 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 z-10">
+                <tr className="text-left text-slate-500 dark:text-slate-300 select-none">
                   <th className="px-3 py-2 w-10"></th>
-                  <th className="px-3 py-2 w-[24ch]">Key</th>
-                  <th className="px-3 py-2">Source</th>
-                  <th className="px-3 py-2 w-[28ch]">Saved</th>
-                  <th className="px-3 py-2 w-[36ch]">Translation</th>
-                  <th className="px-3 py-2 w-[14ch]">Actions</th>
+                  <th className="px-3 py-2 relative" style={{ width: colWidths.key }}>
+                    Key
+                    <span
+                      role="separator"
+                      aria-orientation="vertical"
+                      title="Resize key column"
+                      className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-slate-200 dark:hover:bg-slate-600"
+                      onMouseDown={(e) => beginResize('key', e)}
+                    />
+                  </th>
+                  <th className="px-3 py-2 relative" style={{ width: colWidths.source }}>
+                    Source
+                    <span
+                      role="separator"
+                      aria-orientation="vertical"
+                      title="Resize source column"
+                      className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-slate-200 dark:hover:bg-slate-600"
+                      onMouseDown={(e) => beginResize('source', e)}
+                    />
+                  </th>
+                  <th className="px-3 py-2 relative" style={{ width: colWidths.saved }}>
+                    Saved
+                    <span
+                      role="separator"
+                      aria-orientation="vertical"
+                      title="Resize saved column"
+                      className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-slate-200 dark:hover:bg-slate-600"
+                      onMouseDown={(e) => beginResize('saved', e)}
+                    />
+                  </th>
+                  <th className="px-3 py-2 relative" style={{ width: colWidths.translation }}>
+                    Translation
+                    <span
+                      role="separator"
+                      aria-orientation="vertical"
+                      title="Resize translation column"
+                      className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-slate-200 dark:hover:bg-slate-600"
+                      onMouseDown={(e) => beginResize('translation', e)}
+                    />
+                  </th>
+                  <th className="px-3 py-2 relative" style={{ width: colWidths.actions }}>
+                    Actions
+                    <span
+                      role="separator"
+                      aria-orientation="vertical"
+                      title="Resize actions column"
+                      className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-slate-200 dark:hover:bg-slate-600"
+                      onMouseDown={(e) => beginResize('actions', e)}
+                    />
+                  </th>
                 </tr>
               </thead>
-              <tbody id="rows" className="divide-y divide-slate-200">
+              <tbody id="rows" className="divide-y divide-slate-200 dark:divide-slate-700">
                 {visibleEntries.map(entry => (
                   <TranslationRow
                     key={entry.unitId}
@@ -1364,6 +1496,11 @@ function App() {
                     onChange={value => handleEntryChange(entry, value)}
                     onTranslate={() => handleAiTranslateRow(entry)}
                     onSave={() => handleSaveRow(entry)}
+                    sourceWidth={colWidths.source}
+                    translationWidth={colWidths.translation}
+                    keyWidth={colWidths.key}
+                    savedWidth={colWidths.saved}
+                    actionsWidth={colWidths.actions}
                   />
                 ))}
                 {visibleEntries.length === 0 && (
@@ -1378,13 +1515,13 @@ function App() {
             {filteredEntries.length > visibleEntries.length && (
               <div className="py-3 flex items-center justify-center gap-2">
                 <button
-                  className="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-sm"
+                  className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-sm"
                   onClick={() => setVisibleCount(v => v + ROWS_STEP)}
                 >
                   Load {Math.min(ROWS_STEP, filteredEntries.length - visibleEntries.length)} more
                 </button>
                 <button
-                  className="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-sm"
+                  className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 text-sm"
                   onClick={() => setVisibleCount(filteredEntries.length)}
                 >
                   Show all
@@ -1394,7 +1531,7 @@ function App() {
           </section>
           )}
 
-          <footer className="border-t border-slate-200 bg-white p-2 text-xs text-slate-600 flex items-center justify-between">
+          <footer className="border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between">
             <div id="footerStatus">{status}</div>
             <div className="flex items-center gap-3 min-w-[220px] justify-end">
               {jobProgress.total > 0 && (
@@ -1409,7 +1546,7 @@ function App() {
               )}
               {jobProgress.jobId && jobProgress.status && jobProgress.status !== 'done' && (
                 <button
-                  className="p-1 rounded-lg border border-slate-200 hover:bg-slate-50"
+                  className="p-1 rounded-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
                   onClick={handleCancelJob}
                   title="Stop job"
                   aria-label="Stop job"

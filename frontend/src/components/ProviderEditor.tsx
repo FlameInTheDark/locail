@@ -119,7 +119,7 @@ export default function ProviderEditor({ provider, onCreate, onUpdate, onDelete,
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="ptype">Type</Label>
-            <select id="ptype" className="h-9 border rounded-md px-2" value={form.type} onChange={e => setForm(prev => ({ ...prev, type: e.target.value }))}>
+            <select id="ptype" className="h-9 border rounded-md px-2 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100" value={form.type} onChange={e => setForm(prev => ({ ...prev, type: e.target.value }))}>
               {defaultTypes.map(t => (<option key={t} value={t}>{t}</option>))}
             </select>
           </div>
@@ -142,7 +142,7 @@ export default function ProviderEditor({ provider, onCreate, onUpdate, onDelete,
             ) : (
               <div className="flex items-center gap-2">
                 <Input id="pmodel" value={form.model} onChange={e => setForm(prev => ({ ...prev, model: e.target.value }))} placeholder="gpt-4o-mini or llama3.1" />
-                <button type="button" className="p-2 rounded-md border hover:bg-slate-50" title="Load models" onClick={loadModels} disabled={loadingModels}>
+                <button type="button" className="p-2 rounded-md border hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800" title="Load models" onClick={loadModels} disabled={loadingModels}>
                   <RefreshCw className={`h-4 w-4 ${loadingModels ? 'animate-spin' : ''}`} />
                 </button>
               </div>
@@ -156,7 +156,7 @@ export default function ProviderEditor({ provider, onCreate, onUpdate, onDelete,
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="popt">Options (JSON)</Label>
-          <textarea id="popt" className="w-full rounded-md border px-2 py-1 min-h-[80px] font-mono text-xs" value={form.options_json} onChange={e => setForm(prev => ({ ...prev, options_json: e.target.value }))} placeholder="{ }" />
+          <textarea id="popt" className="w-full rounded-md border px-2 py-1 min-h-[80px] font-mono text-xs dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" value={form.options_json} onChange={e => setForm(prev => ({ ...prev, options_json: e.target.value }))} placeholder="{ }" />
         </div>
 
         <div className="flex items-center gap-2 mt-2">

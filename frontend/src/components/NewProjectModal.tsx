@@ -43,10 +43,10 @@ export default function NewProjectModal({ open, onClose, onSubmit }: Props) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative z-10 w-[92vw] max-w-md rounded-xl bg-white shadow-xl border border-slate-200">
-        <div className="flex items-center justify-between p-3 border-b border-slate-200">
+      <div className="relative z-10 w-[92vw] max-w-md rounded-xl bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700">
+        <div className="flex items-center justify-between p-3 border-b border-slate-200 dark:border-slate-700">
           <div className="text-sm font-semibold">Create Project</div>
-          <button className="p-2 rounded-lg hover:bg-slate-100" onClick={onClose} aria-label="Close">
+          <button className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" onClick={onClose} aria-label="Close">
             <X className="h-4 w-4" />
           </button>
         </div>

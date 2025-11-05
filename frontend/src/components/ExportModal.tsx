@@ -99,16 +99,16 @@ export default function ExportModal({ open, fileId, defaultLocale, originalForma
   return (
     <div className="fixed inset-0 z-50 grid place-items-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative z-10 w-[92vw] max-w-lg rounded-xl bg-white shadow-xl border border-slate-200">
-        <div className="flex items-center justify-between p-3 border-b border-slate-200">
+      <div className="relative z-10 w-[92vw] max-w-lg rounded-xl bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700">
+        <div className="flex items-center justify-between p-3 border-b border-slate-200 dark:border-slate-700">
           <div className="text-sm font-semibold">Export File</div>
-          <button className="p-2 rounded-lg hover:bg-slate-100" onClick={onClose} aria-label="Close"><X className="h-4 w-4"/></button>
+          <button className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" onClick={onClose} aria-label="Close"><X className="h-4 w-4"/></button>
         </div>
         <div className="p-4 grid gap-3">
           {error && <div className="text-sm text-red-600">{error}</div>}
           <div className="grid gap-1.5">
             <label className="text-sm">Format</label>
-            <select className="h-9 border rounded-md px-2" value={format || originalFormat || ''} onChange={e => setFormat(e.target.value)}>
+            <select className="h-9 border rounded-md px-2 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100" value={format || originalFormat || ''} onChange={e => setFormat(e.target.value)}>
               <option value={originalFormat || ''}>{originalFormat || 'original'}</option>
               <option value="paraglidejson">Paraglide JSON (.json)</option>
               <option value="csv">CSV (.csv)</option>
@@ -124,10 +124,10 @@ export default function ExportModal({ open, fileId, defaultLocale, originalForma
           {effectiveFormat === 'csv' && (
             <div className="grid gap-1.5">
               <label className="text-sm">CSV Separator</label>
-              <select className="h-9 border rounded-md px-2" value={csvSep} onChange={e => setCsvSep(e.target.value as any)}>
+              <select className="h-9 border rounded-md px-2 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100" value={csvSep} onChange={e => setCsvSep(e.target.value as any)}>
                 <option value="comma">Comma (,)</option>
                 <option value="semicolon">Semicolon (;)</option>
-                <option value="tab">Tab (\t)</option>
+                <option value="tab">Tab (\\t)</option>
               </select>
             </div>
           )}

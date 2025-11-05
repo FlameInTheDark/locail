@@ -50,7 +50,7 @@ export default function ModelDropdown({ value, options, onChange, placeholder = 
     <div className="relative" ref={wrapRef}>
       <button
         type="button"
-        className="h-9 w-full border rounded-md px-2 flex items-center justify-between bg-white hover:bg-slate-50"
+        className="h-9 w-full border rounded-md px-2 flex items-center justify-between bg-white hover:bg-slate-50 dark:bg-slate-900 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-800"
         onClick={() => setOpen(o => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -59,22 +59,22 @@ export default function ModelDropdown({ value, options, onChange, placeholder = 
         <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg">
-          <div className="p-2 border-b flex items-center gap-2">
+        <div className="absolute z-50 mt-1 w-full rounded-md border bg-white dark:bg-slate-900 dark:border-slate-600 shadow-lg">
+          <div className="p-2 border-b dark:border-slate-600 flex items-center gap-2">
             <div className="relative flex-1">
               <input
                 ref={inputRef}
-                className="h-8 w-full border rounded-md pl-7 pr-2 text-sm"
+                className="h-8 w-full border rounded-md pl-7 pr-2 text-sm dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100"
                 placeholder="Filter models…"
                 value={filter}
                 onChange={e => setFilter(e.target.value)}
               />
-              <Search className="h-4 w-4 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
+              <Search className="h-4 w-4 text-slate-400 dark:text-slate-500 absolute left-2 top-1/2 -translate-y-1/2" />
             </div>
             {onRefresh && (
               <button
                 type="button"
-                className="h-8 w-8 rounded-md border flex items-center justify-center hover:bg-slate-50"
+                className="h-8 w-8 rounded-md border flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-800 dark:border-slate-600"
                 onClick={() => onRefresh()}
                 title="Refresh models"
                 aria-label="Refresh models"
@@ -85,13 +85,13 @@ export default function ModelDropdown({ value, options, onChange, placeholder = 
           </div>
           <ul className="max-h-60 overflow-auto py-1" role="listbox">
             {filtered.length === 0 && (
-              <li className="px-3 py-2 text-sm text-slate-500">No models</li>
+              <li className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">No models</li>
             )}
             {filtered.map(o => (
               <li key={o.value}>
                 <button
                   type="button"
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-100 ${o.value === value ? 'bg-slate-50' : ''}`}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800 ${o.value === value ? 'bg-slate-50 dark:bg-slate-800' : ''}`}
                   onClick={() => { onChange(o.value); setOpen(false) }}
                   role="option"
                   aria-selected={o.value === value}
@@ -99,7 +99,7 @@ export default function ModelDropdown({ value, options, onChange, placeholder = 
                 >
                   <div className="flex items-center justify-between">
                     <span className="truncate">{o.label || o.value}</span>
-                    {o.tokens ? <span className="ml-2 text-xs text-slate-400">{o.tokens}</span> : null}
+                    {o.tokens ? <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">{o.tokens}</span> : null}
                   </div>
                 </button>
               </li>
@@ -110,4 +110,3 @@ export default function ModelDropdown({ value, options, onChange, placeholder = 
     </div>
   )
 }
-

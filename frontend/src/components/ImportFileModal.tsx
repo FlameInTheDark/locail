@@ -75,10 +75,10 @@ export default function ImportFileModal({ open, projectId, onClose, onImported }
   return (
     <div className="fixed inset-0 z-50 grid place-items-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative z-10 w-[92vw] max-w-2xl rounded-xl bg-white shadow-xl border border-slate-200">
-        <div className="flex items-center justify-between p-3 border-b border-slate-200">
+      <div className="relative z-10 w-[92vw] max-w-2xl rounded-xl bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700">
+        <div className="flex items-center justify-between p-3 border-b border-slate-200 dark:border-slate-700">
           <div className="text-sm font-semibold">Import File</div>
-          <button className="p-2 rounded-lg hover:bg-slate-100" onClick={onClose} aria-label="Close"><X className="h-4 w-4"/></button>
+          <button className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" onClick={onClose} aria-label="Close"><X className="h-4 w-4"/></button>
         </div>
         <div className="p-4 grid gap-3">
           {error && <div className="text-sm text-red-600">{error}</div>}
@@ -89,7 +89,7 @@ export default function ImportFileModal({ open, projectId, onClose, onImported }
             </div>
             <div>
               <label className="text-sm">Format</label>
-              <select value={format} onChange={e => setFormat(e.target.value)} className="h-9 border rounded-md px-2 w-full">
+              <select value={format} onChange={e => setFormat(e.target.value)} className="h-9 border rounded-md px-2 w-full dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100">
                 <option value="paraglidejson">Paraglide JSON</option>
                 <option value="csv">CSV</option>
                 <option value="valvevdf">Valve/HL VDF</option>
@@ -100,7 +100,7 @@ export default function ImportFileModal({ open, projectId, onClose, onImported }
           <div
             onDragOver={(e) => { e.preventDefault() }}
             onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) onSelect(f) }}
-            className="border rounded-md p-6 text-center bg-muted/20"
+            className="border rounded-md p-6 text-center bg-muted/20 dark:bg-slate-700/40 dark:border-slate-600"
           >
             <div className="flex flex-col items-center justify-center gap-2">
               <UploadCloud className="h-6 w-6 text-muted-foreground"/>
@@ -120,4 +120,3 @@ export default function ImportFileModal({ open, projectId, onClose, onImported }
     </div>
   )
 }
-

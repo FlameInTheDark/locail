@@ -161,17 +161,17 @@ export default function UpdateFileModal({ open, fileId, filePath, originalFormat
   return (
     <div className="fixed inset-0 z-50 grid place-items-center">
       <div className="absolute inset-0 bg-black/40" onClick={() => !busy && onClose()} />
-      <div className="relative z-10 w-[92vw] max-w-3xl rounded-xl bg-white shadow-xl border border-slate-200 flex flex-col max-h-[85vh]">
-        <div className="flex items-center justify-between p-3 border-b border-slate-200">
+      <div className="relative z-10 w-[92vw] max-w-3xl rounded-xl bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700 flex flex-col max-h-[85vh]">
+        <div className="flex items-center justify-between p-3 border-b border-slate-200 dark:border-slate-700">
           <div className="text-sm font-semibold">Update File</div>
-          <button className="p-2 rounded-lg hover:bg-slate-100" onClick={() => !busy && onClose()} aria-label="Close"><X className="h-4 w-4"/></button>
+          <button className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => !busy && onClose()} aria-label="Close"><X className="h-4 w-4"/></button>
         </div>
         <div className="p-4 grid gap-3 overflow-y-auto min-h-0">
           {error && <div className="text-sm text-red-600">{error}</div>}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="text-sm">Format</label>
-              <select className="h-9 w-full border rounded-md px-2" value={format || originalFormat || ''} onChange={e => setFormat(e.target.value)}>
+              <select className="h-9 w-full border rounded-md px-2 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100" value={format || originalFormat || ''} onChange={e => setFormat(e.target.value)}>
                 <option value={originalFormat || ''}>{originalFormat || 'original'}</option>
                 <option value="paraglidejson">Paraglide JSON (.json)</option>
                 <option value="csv">CSV (.csv)</option>
@@ -181,7 +181,7 @@ export default function UpdateFileModal({ open, fileId, filePath, originalFormat
             <div>
               <label className="text-sm">Select updated file</label>
               <div
-                className={`border rounded-md p-3 text-center bg-muted/20 ${dragActive ? 'ring-2 ring-indigo-500 border-indigo-500' : ''}`}
+                className={`border rounded-md p-3 text-center bg-muted/20 dark:bg-slate-700/40 dark:border-slate-600 ${dragActive ? 'ring-2 ring-indigo-500 border-indigo-500' : ''}`}
                 onDragOver={onDropAreaDragOver}
                 onDragLeave={onDropAreaDragLeave}
                 onDrop={onDropAreaDrop}
@@ -202,8 +202,8 @@ export default function UpdateFileModal({ open, fileId, filePath, originalFormat
             <div className="grid gap-3">
               <div className="text-sm">Imported {totalImported} keys · New: {totalNew} · Conflicts: {totalConf}</div>
               {totalNew > 0 && (
-                <div className="border rounded-md">
-                  <div className="px-3 py-2 text-sm font-medium bg-slate-50 border-b">New Keys</div>
+                <div className="border rounded-md dark:border-slate-600">
+                  <div className="px-3 py-2 text-sm font-medium bg-slate-50 dark:bg-slate-700 dark:text-slate-200 border-b dark:border-slate-600">New Keys</div>
                   <ul className="max-h-48 overflow-auto text-sm">
                     {newKeys.map(n => (
                       <li key={n.key} className="px-3 py-1 flex items-center justify-between">
@@ -215,11 +215,11 @@ export default function UpdateFileModal({ open, fileId, filePath, originalFormat
                 </div>
               )}
               {totalConf > 0 && (
-                <div className="border rounded-md max-h-[50vh] overflow-auto">
-                  <div className="px-3 py-2 text-sm font-medium bg-slate-50 border-b">Conflicts</div>
+                <div className="border rounded-md max-h-[50vh] overflow-auto dark:border-slate-600">
+                  <div className="px-3 py-2 text-sm font-medium bg-slate-50 dark:bg-slate-700 dark:text-slate-200 border-b dark:border-slate-600">Conflicts</div>
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-50 border-b">
-                      <tr className="text-left">
+                    <thead className="bg-slate-50 dark:bg-slate-700 border-b dark:border-slate-600">
+                      <tr className="text-left text-slate-700 dark:text-slate-200">
                         <th className="px-3 py-1 w-[24ch]">Key</th>
                         <th className="px-3 py-1">Existing</th>
                         <th className="px-3 py-1">Imported</th>
@@ -228,22 +228,22 @@ export default function UpdateFileModal({ open, fileId, filePath, originalFormat
                     </thead>
                     <tbody>
                       {conflicts.map((c, idx) => (
-                        <tr key={c.key} className="border-b last:border-0">
+                        <tr key={c.key} className="border-b dark:border-slate-700 last:border-0">
                           <td className="px-3 py-1 font-mono text-xs align-top">{c.key}</td>
-                          <td className="px-3 py-1 align-top text-slate-600">{c.dbSource}</td>
-                          <td className="px-3 py-1 align-top text-slate-800">{c.newSource}</td>
+                          <td className="px-3 py-1 align-top text-slate-600 dark:text-slate-300">{c.dbSource}</td>
+                          <td className="px-3 py-1 align-top text-slate-800 dark:text-slate-100">{c.newSource}</td>
                           <td className="px-3 py-1 align-top">
                             <div className="inline-flex items-center rounded-md border overflow-hidden" role="group" aria-label={`Choose version for ${c.key}`}>
                               <button
                                 type="button"
-                                className={`px-2 py-1 text-xs ${c.choice === 'db' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                                className={`px-2 py-1 text-xs ${c.choice === 'db' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-900 dark:text-slate-200 text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
                                 onClick={() => setConflicts(prev => prev.map((x,i) => i===idx? { ...x, choice: 'db' }: x))}
                               >
                                 Old
                               </button>
                               <button
                                 type="button"
-                                className={`px-2 py-1 text-xs border-l ${c.choice === 'new' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                                className={`px-2 py-1 text-xs border-l ${c.choice === 'new' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-900 dark:text-slate-200 text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
                                 onClick={() => setConflicts(prev => prev.map((x,i) => i===idx? { ...x, choice: 'new' }: x))}
                               >
                                 New
