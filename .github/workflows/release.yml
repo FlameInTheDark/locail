@@ -160,6 +160,25 @@ jobs:
         run: |
           if pkg-config --exists webkit2gtk-4.1; then echo "WAILS_TAGS=webkitgtk_4_1" >> $GITHUB_ENV; else echo "WAILS_TAGS=" >> $GITHUB_ENV; fi
 
+      - name: Shim pkg-config alias for webkit2gtk-4.0 -> 4.1 (if needed)
+        run: |
+          if pkg-config --exists webkit2gtk-4.1 && ! pkg-config --exists webkit2gtk-4.0; then \
+            mkdir -p "$HOME/pc"; \
+            cat > "$HOME/pc/webkit2gtk-4.0.pc" << 'EOF' 
+prefix=/usr
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+Name: WebKitGTK
+Description: Compatibility shim mapping 4.0 to 4.1
+Version: 4.0
+Requires: webkit2gtk-4.1
+Cflags:
+Libs:
+EOF
+            echo "PKG_CONFIG_PATH=$HOME/pc:${PKG_CONFIG_PATH}" >> $GITHUB_ENV; \
+          fi
+
       - name: Install Wails CLI
         run: |
           go install github.com/wailsapp/wails/v2/cmd/wails@latest
